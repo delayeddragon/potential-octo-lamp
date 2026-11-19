@@ -1552,193 +1552,119 @@ body[data-stage='off'] .turn-hint {
 
 /* ---------------------------------------------------------------- Deck and Codex */
 
-/* These two are shells until they are built in full: a frosted pane beside the champion. */
-.screen-deck,
-.screen-codex {
-  grid-template-columns: minmax(0, 1fr) 58em;
-  align-items: center;
+/*
+ * On these two screens the panes take the whole of the lobby, and the hall is only a presence behind
+ * them. A dark frosted sheet lies over the stage and comes and goes with the tab. It is the panes'
+ * sibling, not their parent, and they do not blur the hall a second time: the sheet has done it.
+ */
+.screens::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(3, 5, 12, 0.4), rgba(3, 5, 12, 0.2) 45%, rgba(3, 5, 12, 0.46));
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.5s ease, visibility 0s linear 0.5s;
+  pointer-events: none;
 }
 
+body[data-tab='deck'] .screens::before,
+body[data-tab='codex'] .screens::before {
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
+}
+
+body.lite .screens::before {
+  background: rgba(3, 5, 12, 0.8);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* Behind the sheet the champion stands in the middle of the hall. */
 .screen-deck .hero-spot,
 .screen-codex .hero-spot {
-  top: 3em;
-  bottom: 4.5em;
-  left: calc(19.5% - 17em);
-  width: 34em;
+  inset: 0;
 }
 
-.shell {
-  grid-column: 2;
-  display: grid;
-  gap: 1.2em;
+/* Both screens are laid out for the 16:9 window, 100em by 56.25em, and sit in the middle of a larger one. */
+.screen-deck {
+  grid-template-columns: minmax(0, 62em) minmax(0, 33em);
+  grid-template-rows: minmax(0, 47em);
+  justify-content: center;
+  align-content: center;
+}
+
+.screen-codex {
+  grid-template-columns: repeat(3, minmax(0, 31.16em));
+  grid-template-rows: minmax(0, 47em);
+  justify-content: center;
+  align-content: center;
+}
+
+.app .pane {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
-  padding: 1.6em 1.9em 1.7em;
-  animation: slide-from-right 0.55s var(--ease-out) both;
+  min-height: 0;
+  padding: 1.15em 1.4em 1.3em;
+  background: linear-gradient(180deg, rgba(22, 31, 62, 0.42), rgba(7, 10, 24, 0.56));
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
-.shell-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 1.5em;
-  padding-bottom: 1em;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
-}
-
-.shell-heading {
-  display: grid;
-  gap: 0.3em;
-}
-
-.shell-title {
-  font-family: var(--font-display);
-  font-size: 1.7em;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  line-height: 1.15;
-  text-transform: uppercase;
-  color: var(--gold-1);
-  text-shadow: 0 0 1em rgba(227, 183, 85, 0.45);
-}
-
-.shell-head > .soon-tag {
-  margin-bottom: 0.5em;
-}
-
-.shell-lead {
-  max-width: 46em;
-  font-size: 1.02em;
-  line-height: 1.5;
-  color: #c9d2ea;
-}
-
-.shell-note {
+.pane-head {
   display: flex;
   align-items: center;
-  gap: 0.9em;
-  padding-top: 1em;
-  border-top: 1px solid rgba(255, 255, 255, 0.09);
-  font-size: 0.86em;
-  line-height: 1.4;
-  color: var(--text-dim);
+  gap: 0.8em;
+  min-height: 2em;
 }
 
-.shell-note .soon-tag {
-  font-size: 0.74em;
-}
-
-/* Deck: pick a card, then the card in the other zone it swaps places with. */
-.builder-meta {
-  display: flex;
-  align-items: center;
-  gap: 1em;
-  padding-bottom: 0.2em;
+.pane-head .panel-title {
   white-space: nowrap;
 }
 
-.deck-count {
-  font-family: var(--font-display);
-  font-size: 1.15em;
+.count-pill {
+  flex: none;
+  padding: 0.3em 0.8em 0.2em;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 0.7em;
   font-weight: 700;
-  line-height: 1.1;
-  color: #f4f7ff;
+  letter-spacing: 0.16em;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: #c9d2ea;
 }
 
-/* Room is left above and to the left for the cost badges, and above for a card that lifts. */
-.deck {
-  display: flex;
-  flex: none;
-  gap: 1em;
-  padding: 0.8em 0 0.2em 0.7em;
+/* A card's frame, by its type: gold for a troop, crimson for a spell, cyan for a building. */
+.pool-card,
+.inspector {
+  --frame: var(--gold-2);
+  --frame-glow: rgba(227, 183, 85, 0.6);
+  --tint: rgba(227, 183, 85, 0.2);
 }
 
-.reserve {
-  display: grid;
-  gap: 0.2em;
+.pool-card.type-spell,
+.inspector[data-type='spell'] {
+  --frame: var(--crimson-2);
+  --frame-glow: rgba(240, 65, 58, 0.6);
+  --tint: rgba(240, 65, 58, 0.2);
 }
 
-.builder-hint {
-  min-height: 1.4em;
-  font-size: 0.92em;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  color: var(--text-dim);
+.pool-card.type-building,
+.inspector[data-type='building'] {
+  --frame: var(--cyan-2);
+  --frame-glow: rgba(47, 211, 245, 0.6);
+  --tint: rgba(47, 211, 245, 0.2);
 }
 
-.builder:has(.is-picked) .builder-hint {
-  color: var(--gold-1);
-}
-
-.deck-card {
-  position: relative;
-  width: 7.3em;
-  height: 9.7em;
-  flex: none;
-  padding: 0;
-  border: 1.5px solid var(--frame);
-  border-radius: 0.75em;
-  background:
-    radial-gradient(120% 70% at 50% 30%, var(--tint), transparent 70%),
-    linear-gradient(180deg, #1d2950 0%, #0a0f22 100%);
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.07),
-    0 0.5em 1em rgba(0, 0, 0, 0.5);
-  outline: none;
-  cursor: pointer;
-  transition: transform 0.18s var(--ease-out), box-shadow 0.18s ease, border-color 0.18s ease, filter 0.18s ease;
-}
-
-.deck-card.dealt {
-  animation: card-in 0.5s var(--ease-out) both;
-  animation-delay: calc(var(--i, 0) * 60ms + 150ms);
-}
-
-/* A Reserve card sits dimmed with a dashed frame until it is looked at or picked. */
-.reserve .deck-card {
-  border-style: dashed;
-  filter: saturate(0.6) brightness(0.8);
-}
-
-.deck-card:hover,
-.deck-card:focus-visible,
-.deck-card.is-picked {
-  z-index: 2;
-  transform: translateY(-0.35em) scale(1.06);
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.12),
-    0 0.9em 1.5em rgba(0, 0, 0, 0.6),
-    0 0 1.5em var(--frame-glow);
-}
-
-.reserve .deck-card:hover,
-.reserve .deck-card:focus-visible,
-.reserve .deck-card.is-picked {
-  filter: none;
-}
-
-.deck-card:focus-visible {
-  outline: 2px solid var(--cyan-2);
-  outline-offset: 3px;
-}
-
-.deck-card.is-picked {
-  border-color: var(--gold-1);
-  box-shadow:
-    0 0 0 2px var(--gold-1),
-    0 0.9em 1.5em rgba(0, 0, 0, 0.6),
-    0 0 1.8em var(--frame-glow);
-}
-
-/* Cards the picked one can swap with breathe a gold ring. */
-.deck-card.is-target {
-  animation: target-pulse 1.1s ease-in-out infinite alternate;
-}
-
-.deck-card.just-swapped {
-  animation: swap-in 0.7s var(--ease-out) both;
-}
-
-/* The painted illustration fills the card; the name sits on a shade at its foot. */
+/* The painted illustration fills a card; its name sits on a shade at its foot. */
 .card-art {
   position: absolute;
   inset: 0;
@@ -1768,7 +1694,7 @@ body[data-stage='off'] .turn-hint {
   display: grid;
   place-items: center;
   height: 2.3em;
-  font-size: 0.72em;
+  font-size: 0.8em;
   font-weight: 700;
   letter-spacing: 0.05em;
   line-height: 1.08;
@@ -1778,6 +1704,7 @@ body[data-stage='off'] .turn-hint {
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
 }
 
+/* The Elixir orb. */
 .card-cost {
   position: absolute;
   top: -0.6em;
@@ -1805,51 +1732,1055 @@ body[data-stage='off'] .turn-hint {
   text-shadow: 0 1px 2px rgba(60, 0, 90, 0.95);
 }
 
-/* Codex: what is to be written there, a chapter to a tile. */
-.codex-list {
+/* ................................................................ Deck: the Battle Deck */
+
+.deck-main {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.9em;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 1.2em;
+  min-width: 0;
+  min-height: 0;
+  animation: slide-from-left 0.55s var(--ease-out) both;
 }
 
-.codex-entry {
+.battle-deck {
+  gap: 0.75em;
+}
+
+.battle-deck .avg-badge {
+  margin-left: auto;
+}
+
+/* How many of each type the deck holds: 3 Troops • 2 Spells • 1 Building. */
+.mix {
+  display: flex;
+  align-items: center;
+  gap: 1.2em;
+}
+
+.mix-pill {
+  --pill: var(--gold-2);
+  position: relative;
+  padding: 0.28em 0.8em 0.18em;
+  border: 1px solid color-mix(in srgb, var(--pill) 55%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--pill) 13%, rgba(6, 9, 20, 0.5));
+  font-size: 0.72em;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: color-mix(in srgb, var(--pill) 45%, #fff);
+  transition: opacity 0.3s ease;
+}
+
+.mix-pill.type-spell {
+  --pill: var(--crimson-2);
+}
+
+.mix-pill.type-building {
+  --pill: var(--cyan-2);
+}
+
+.mix-pill b {
+  font-size: 1.15em;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+}
+
+.mix-pill.is-none {
+  opacity: 0.45;
+}
+
+.mix-pill + .mix-pill::before {
+  content: '•';
+  position: absolute;
+  top: 50%;
+  left: -1.2em;
+  translate: 0 -50%;
+  color: var(--gold-2);
+}
+
+/* The line over the six slots: a standing hint, the news of a swap, or the prompt of one being made. */
+.swap-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.8em;
+  height: 2.8em;
+  padding: 0 0.45em 0 0.9em;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 0.7em;
+  background: rgba(255, 255, 255, 0.03);
+  transition: border-color 0.25s ease, background 0.25s ease, box-shadow 0.25s ease;
+}
+
+.swap-bar svg {
+  width: 1.25em;
+  height: 1.25em;
+  flex: none;
+  fill: none;
+  stroke: var(--text-dim);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: stroke 0.25s ease;
+}
+
+.swap-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.88em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-dim);
+  transition: color 0.25s ease;
+}
+
+.swap-text strong {
+  color: #fff;
+}
+
+.swap-bar.is-news {
+  border-color: rgba(125, 255, 184, 0.4);
+}
+
+.swap-bar.is-news .swap-text {
+  color: #b9ffd8;
+}
+
+.swap-bar.is-news svg {
+  stroke: #7dffb8;
+}
+
+.swap-bar.is-swapping {
+  border-color: var(--gold-2);
+  background: linear-gradient(90deg, rgba(227, 183, 85, 0.24), rgba(227, 183, 85, 0.07));
+  box-shadow: 0 0 1.4em rgba(227, 183, 85, 0.28);
+  animation: bar-in 0.3s var(--ease-out) both;
+}
+
+.swap-bar.is-swapping .swap-text {
+  color: var(--gold-1);
+}
+
+.swap-bar.is-swapping svg {
+  stroke: var(--gold-1);
+}
+
+.btn-cancel-swap {
+  flex: none;
+  padding: 0.5em 1.3em 0.4em;
+  border-radius: 0.6em;
+  font-size: 0.76em;
+}
+
+/* Room is left above and to the left for the Elixir orbs, and above for a card that lifts. */
+.deck-row {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 1em;
+  padding: 0.7em 0.2em 0.1em 0.7em;
+}
+
+.deck-card {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  padding: 0;
+  border: 1.5px solid var(--frame);
+  border-radius: 0.75em;
+  background:
+    radial-gradient(120% 70% at 50% 30%, var(--tint), transparent 70%),
+    linear-gradient(180deg, #1d2950 0%, #0a0f22 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.07),
+    0 0.5em 1em rgba(0, 0, 0, 0.5);
+  font: inherit;
+  outline: none;
+  cursor: pointer;
+  transition: transform 0.18s var(--ease-out), box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.deck-card.dealt,
+.pool-card.dealt {
+  animation: card-in 0.45s var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 45ms + 100ms);
+}
+
+.deck-card:hover,
+.deck-card:focus-visible,
+.deck-card.is-inspected {
+  z-index: 2;
+  transform: translateY(-0.3em);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.12),
+    0 0.9em 1.5em rgba(0, 0, 0, 0.6),
+    0 0 1.5em var(--frame-glow);
+}
+
+.deck-card:focus-visible,
+.pool-card:focus-visible {
+  outline: 2px solid var(--cyan-2);
+  outline-offset: 3px;
+}
+
+/* The card in the inspector wears a gold frame, wherever it is. */
+.deck-card.is-inspected {
+  border-color: var(--gold-1);
+  box-shadow:
+    0 0 0 2px var(--gold-1),
+    0 0.9em 1.5em rgba(0, 0, 0, 0.6),
+    0 0 1.8em var(--frame-glow);
+}
+
+/* Swap Mode: every slot breathes a gold ring, and the one under the pointer steps forward. */
+.deck-card.is-target {
+  border-color: var(--gold-1);
+  animation: target-pulse 0.9s ease-in-out infinite alternate;
+}
+
+.deck-card.is-target:hover,
+.deck-card.is-target:focus-visible {
+  transform: translateY(-0.45em) scale(1.04);
+}
+
+.deck-card.just-swapped {
+  animation: swap-in 0.7s var(--ease-out) both;
+}
+
+/* ................................................................ Deck: the collection */
+
+.collection {
+  gap: 0.85em;
+}
+
+.filters {
+  display: flex;
+  gap: 0.45em;
+  margin-left: auto;
+}
+
+.filter {
+  appearance: none;
+  padding: 0.5em 1.15em 0.38em;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  background: rgba(8, 12, 26, 0.6);
+  font: inherit;
+  font-size: 0.74em;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--text-dim);
+  cursor: pointer;
+  outline: none;
+  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.filter:hover,
+.filter:focus-visible {
+  border-color: rgba(184, 246, 255, 0.6);
+  color: var(--text);
+}
+
+.filter:focus-visible {
+  box-shadow: 0 0 0 2px rgba(184, 246, 255, 0.5);
+}
+
+.filter[aria-pressed='true'] {
+  border-color: var(--gold-2);
+  background: linear-gradient(180deg, rgba(227, 183, 85, 0.32), rgba(227, 183, 85, 0.12));
+  color: var(--gold-1);
+  box-shadow: 0 0 1em rgba(227, 183, 85, 0.3);
+}
+
+/* Four cards across and two rows deep, whatever the filter leaves: a card keeps its size. */
+.pool {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: 0.9em;
+  min-height: 0;
+}
+
+.pool li {
+  min-width: 0;
+  min-height: 0;
+}
+
+.pool-card {
+  position: relative;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 0.15em 1.1em;
-  padding: 1.05em 1.2em;
-  border: 1px dashed rgba(255, 255, 255, 0.18);
+  gap: 0.9em;
+  width: 100%;
+  height: 100%;
+  padding: 0.5em 0.6em 0.5em 0.75em;
+  border: 1px solid color-mix(in srgb, var(--frame) 50%, transparent);
   border-radius: 0.85em;
-  background: rgba(255, 255, 255, 0.035);
+  background: linear-gradient(100deg, color-mix(in srgb, var(--frame) 13%, rgba(14, 20, 42, 0.82)), rgba(8, 12, 26, 0.62));
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  outline: none;
+  cursor: pointer;
+  transition: transform 0.18s var(--ease-out), box-shadow 0.18s ease, border-color 0.18s ease, filter 0.18s ease, opacity 0.25s ease;
 }
 
-.codex-entry svg {
-  grid-row: 1 / 3;
-  width: 2.5em;
-  height: 2.5em;
-  fill: none;
-  stroke: var(--gold-2);
-  stroke-width: 1.5;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  filter: drop-shadow(0 0 0.5em rgba(227, 183, 85, 0.45));
+.pool-thumb {
+  position: relative;
+  width: 5.5em;
+  aspect-ratio: 3 / 4;
+  border: 1.5px solid var(--frame);
+  border-radius: 0.55em;
+  background: #0a0f22;
+  box-shadow: 0 0.3em 0.7em rgba(0, 0, 0, 0.5);
 }
 
-.codex-entry strong {
-  align-self: end;
+.pool-thumb .card-art {
+  border-radius: 0.45em;
+}
+
+.pool-thumb .card-art::after {
+  content: none;
+}
+
+.pool-thumb .card-cost {
+  top: -0.45em;
+  left: -0.55em;
+  font-size: 0.72em;
+}
+
+.pool-text {
+  display: grid;
+  justify-items: start;
+  gap: 0.35em;
+  min-width: 0;
+}
+
+.pool-name {
   font-family: var(--font-display);
-  font-size: 1.05em;
+  font-size: 0.98em;
   font-weight: 700;
+  line-height: 1.15;
+  color: #fff;
+}
+
+.pool-type {
+  font-size: 0.68em;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--frame) 60%, #fff);
+}
+
+/* Where a card is kept: in the Battle Deck, which glows, or in the Reserve. */
+.zone-badge {
+  padding: 0.3em 0.75em 0.18em;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 0.62em;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--text-dim);
+}
+
+.zone-badge.is-deck {
+  border-color: rgba(125, 255, 184, 0.75);
+  background: rgba(40, 160, 100, 0.2);
+  color: #a8ffd0;
+  box-shadow: 0 0 0.9em rgba(77, 255, 160, 0.5);
+  text-shadow: 0 0 0.6em rgba(77, 255, 160, 0.7);
+}
+
+/* A Reserve card sits dimmed in a dashed frame until it is looked at. */
+.pool-card.in-reserve {
+  border-style: dashed;
+  filter: saturate(0.55) brightness(0.78);
+}
+
+.pool-card:hover,
+.pool-card:focus-visible {
+  z-index: 1;
+  border-color: var(--frame);
+  transform: translateY(-0.15em);
+  box-shadow:
+    0 0.6em 1.2em rgba(0, 0, 0, 0.5),
+    0 0 1.2em var(--frame-glow);
+}
+
+.pool-card.in-reserve:hover,
+.pool-card.in-reserve:focus-visible,
+.pool-card.in-reserve.is-inspected {
+  filter: none;
+}
+
+.pool-card.is-inspected {
+  border-style: solid;
+  border-color: var(--gold-1);
+  box-shadow:
+    0 0 0 1px var(--gold-1),
+    0 0.5em 1.1em rgba(0, 0, 0, 0.5),
+    0 0 1.5em rgba(227, 183, 85, 0.45);
+}
+
+/* While a swap waits for its slot the collection stands back: the slots are what to look at. */
+.deck-main:has(.battle-deck.is-swapping) .pool-card:not(.is-inspected) {
+  opacity: 0.5;
+}
+
+.pool-card.just-swapped {
+  animation: swap-in 0.7s var(--ease-out) both;
+}
+
+/* ................................................................ Deck: the card inspector */
+
+.inspector {
+  gap: 0.85em;
+  animation: slide-from-right 0.55s var(--ease-out) both;
+}
+
+.inspect-top {
+  display: grid;
+  grid-template-columns: 13em minmax(0, 1fr);
+  align-items: start;
+  gap: 1.3em;
+}
+
+.inspect-art {
+  position: relative;
+  display: block;
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  border: 2px solid var(--frame);
+  border-radius: 0.95em;
+  background: #0a0f22;
+  box-shadow:
+    0 0.8em 1.8em rgba(0, 0, 0, 0.55),
+    0 0 2.2em var(--frame-glow);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.inspect-art img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  animation: fade-in 0.3s ease both;
+}
+
+/* A sheen over the painting, as on glass. */
+.inspect-art::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.16), transparent 32%, transparent 68%, rgba(0, 0, 0, 0.38));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.inspect-id {
+  display: grid;
+  justify-items: start;
+  gap: 0.55em;
+  min-width: 0;
+  padding-top: 0.15em;
+}
+
+.inspect-tags {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+}
+
+.type-badge {
+  padding: 0.3em 0.9em 0.2em;
+  border: 1px solid var(--frame);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--frame) 18%, rgba(6, 9, 20, 0.6));
+  font-size: 0.68em;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: color-mix(in srgb, var(--frame) 45%, #fff);
+}
+
+.inspect-tags .zone-badge {
+  font-size: 0.68em;
+}
+
+.inspect-name {
+  font-family: var(--font-display);
+  font-size: 1.6em;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  line-height: 1.12;
+  color: #fff;
+  text-shadow: 0 0 0.9em var(--frame-glow);
+}
+
+.inspect-tagline {
+  font-size: 0.8em;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  line-height: 1.3;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--frame) 60%, #fff);
+}
+
+.inspect-cost {
+  display: flex;
+  align-items: center;
+  gap: 0.9em;
+  margin: 0.45em 0 0.3em 0.5em;
+  font-size: 0.92em;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--elixir-1);
+}
+
+.inspect-cost .card-cost {
+  position: relative;
+  top: 0;
+  left: 0;
+  font-size: 1.2em;
+}
+
+.inspect-traits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4em;
+}
+
+.inspect-traits li {
+  padding: 0.24em 0.75em 0.14em;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 0.66em;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  line-height: 1.25;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: #c3cde8;
+}
+
+.inspect-desc {
+  font-size: 0.9em;
+  line-height: 1.42;
+  color: #c9d2ea;
+}
+
+/* A card's figures. A bar fills to `--value` (0..1) of the largest figure of its kind in the pool. */
+.card-stats {
+  display: grid;
+  gap: 0.72em;
+  padding-top: 0.95em;
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.cstat {
+  --bar-1: #2fe08a;
+  --bar-2: #b6ffd6;
+  display: grid;
+  grid-template-columns: 5.6em minmax(0, 1fr);
+  align-items: center;
+}
+
+.cstat[data-stat='damage'] {
+  --bar-1: var(--crimson-2);
+  --bar-2: #ffc39a;
+}
+
+.cstat[data-stat='heal'] {
+  --bar-1: #2fe0c0;
+  --bar-2: #c8fff2;
+}
+
+.cstat[data-stat='count'] {
+  --bar-1: var(--gold-2);
+  --bar-2: var(--gold-1);
+}
+
+.cstat[data-stat='reach'] {
+  --bar-1: var(--cyan-2);
+  --bar-2: var(--cyan-1);
+}
+
+.cstat dt {
+  font-size: 0.72em;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.cstat dd {
+  display: flex;
+  align-items: center;
+  gap: 0.7em;
+  min-width: 0;
+  min-height: 1.7em;
+}
+
+.cstat .meter-track {
+  flex: 1;
+}
+
+.cstat-value {
+  flex: none;
+  width: 2.9em;
+  font-size: 0.95em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-align: right;
+  color: #fff;
+}
+
+.cstat-note {
+  flex: none;
+  width: 7em;
+  font-size: 0.7em;
+  font-weight: 600;
   letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--text-dim);
+}
+
+.cstat-badges {
+  flex-wrap: wrap;
+  gap: 0.4em;
+}
+
+.cstat-badge {
+  padding: 0.24em 0.75em 0.14em;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 0.7em;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  line-height: 1.25;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: #dbe3f7;
+}
+
+.cstat[data-stat='targets'] .cstat-badge {
+  border-color: rgba(184, 246, 255, 0.35);
+  color: var(--cyan-1);
+}
+
+/* Equip into Deck, pressed: it waits, outlined in gold, for the slot to be chosen. */
+.btn-equip.is-arming {
+  animation: arming 0.9s ease-in-out infinite alternate;
+}
+
+.btn-equip.is-arming .btn-face,
+.btn-equip.is-arming:hover .btn-face {
+  background: linear-gradient(180deg, #2d240f, #151008);
+  color: var(--gold-1);
+  text-shadow: 0 0 0.8em rgba(227, 183, 85, 0.6);
+}
+
+.btn-equip.is-arming .btn-face::after {
+  content: none;
+}
+
+/* ................................................................ Codex */
+
+.codex-col {
+  gap: 0.8em;
+  animation: rise-in 0.55s var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 80ms);
+}
+
+.codex-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 0.3em 1em;
+  padding-bottom: 0.85em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.codex-head .field-label {
+  grid-column: 1 / -1;
+}
+
+.codex-keys,
+.control-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3em;
+}
+
+.codex-sub {
+  margin-top: 0.1em;
+}
+
+/* A key, as a key: lit from above, with a thick lower edge to be pressed down. */
+.keycap {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  min-width: 2.15em;
+  height: 2.15em;
+  padding: 0 0.5em;
+  border: 1px solid rgba(227, 183, 85, 0.6);
+  border-bottom-width: 3px;
+  border-radius: 0.45em;
+  background: linear-gradient(180deg, #27325a, #0c1126);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 0.2em 0.5em rgba(0, 0, 0, 0.5);
+  font-family: var(--font-ui);
+  font-size: 0.82em;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--gold-1);
+}
+
+.keycap.wide {
+  padding: 0 0.8em;
+  font-size: 0.7em;
+  height: 2.52em;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.codex-icon {
+  position: relative;
+  flex: none;
+  width: 4.3em;
+  height: 4.3em;
+  border: 1.5px solid var(--gold-2);
+  border-radius: 0.7em;
+  background: var(--bg-1);
+  box-shadow: 0 0.3em 0.8em rgba(0, 0, 0, 0.5);
+}
+
+.codex-icon img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 0.6em;
+  object-fit: cover;
+}
+
+.codex-icon .keycap {
+  position: absolute;
+  top: -0.6em;
+  left: -0.6em;
+}
+
+.codex-body {
+  display: grid;
+  justify-items: start;
+  gap: 0.38em;
+  min-width: 0;
+}
+
+.codex-name {
+  font-family: var(--font-display);
+  font-size: 1.04em;
+  font-weight: 700;
+  letter-spacing: 0.03em;
   line-height: 1.2;
   color: #fff;
 }
 
-.codex-entry span {
-  align-self: start;
+.codex-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35em;
+}
+
+.codex-tag {
+  flex: none;
+  padding: 0.26em 0.75em 0.16em;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 0.68em;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  line-height: 1.25;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: #dbe3f7;
+}
+
+/* A price in gold wears a coin. It keeps its small g, which in capitals reads as a nought. */
+.codex-tag.is-gold {
+  border-color: rgba(227, 183, 85, 0.6);
+  background: rgba(227, 183, 85, 0.13);
+  font-size: 0.76em;
+  letter-spacing: 0.06em;
+  text-transform: none;
+  color: var(--gold-1);
+}
+
+.codex-tag.is-gold::before {
+  content: '';
+  display: inline-block;
+  width: 0.72em;
+  height: 0.72em;
+  margin-right: 0.45em;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, var(--gold-1), var(--gold-2) 55%, var(--gold-3));
+  box-shadow: 0 0 0.5em rgba(227, 183, 85, 0.7);
+}
+
+.codex-tag.is-double {
+  border-color: color-mix(in srgb, var(--elixir-2) 70%, transparent);
+  background: rgba(201, 75, 240, 0.14);
+  color: var(--elixir-1);
+}
+
+.codex-tag.is-sudden {
+  border-color: color-mix(in srgb, var(--crimson-2) 70%, transparent);
+  background: rgba(240, 65, 58, 0.14);
+  color: var(--crimson-1);
+}
+
+.codex-text {
   font-size: 0.86em;
-  line-height: 1.3;
+  line-height: 1.38;
+  color: #c9d2ea;
+}
+
+.codex-use {
+  font-size: 0.76em;
+  line-height: 1.35;
   color: var(--text-dim);
+}
+
+.codex-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5em;
+  padding-top: 0.85em;
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+  font-size: 0.8em;
+  color: var(--text-dim);
+}
+
+/* Relics: the three share the column's height between them. */
+.relics {
+  flex: 1;
+  display: grid;
+  grid-auto-rows: minmax(0, 1fr);
+  gap: 0.75em;
+  min-height: 0;
+}
+
+.relic {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 1.15em;
+  padding: 0.7em 1em 0.7em 1.2em;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 0.85em;
+  background: linear-gradient(100deg, rgba(24, 33, 62, 0.55), rgba(8, 12, 26, 0.4));
+}
+
+.relic .codex-icon {
+  width: 5.2em;
+  height: 5.2em;
+}
+
+/* River Runes: each in its own colour, the one the match draws it in. */
+.cadence {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45em;
+}
+
+.cadence .codex-use {
+  flex-basis: 100%;
+}
+
+.runes {
+  flex: 1;
+  display: grid;
+  grid-auto-rows: minmax(0, 1fr);
+  gap: 0.6em;
+  min-height: 0;
+}
+
+.rune {
+  --rune: #ffa41a;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 1em;
+  padding: 0.45em 1em 0.45em 0.75em;
+  border: 1px solid color-mix(in srgb, var(--rune) 45%, transparent);
+  border-radius: 0.85em;
+  background: linear-gradient(100deg, color-mix(in srgb, var(--rune) 13%, rgba(14, 20, 42, 0.7)), rgba(8, 12, 26, 0.4));
+}
+
+.rune[data-rune='haste'] {
+  --rune: #5dffb0;
+}
+
+.rune[data-rune='regen'] {
+  --rune: #b48cff;
+}
+
+.rune .codex-icon {
+  width: 3.5em;
+  height: 3.5em;
+  border-color: var(--rune);
+  box-shadow: 0 0 1em color-mix(in srgb, var(--rune) 45%, transparent);
+}
+
+.rune-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+}
+
+.rune-boon {
+  font-size: 1.02em;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  color: var(--rune);
+  text-shadow: 0 0 0.7em color-mix(in srgb, var(--rune) 60%, transparent);
+}
+
+/* The match clock as a bar: each part as wide as the time it takes. */
+.timeline {
+  display: flex;
+  gap: 0.3em;
+  margin: 0;
+  padding: 0.85em 0 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+  list-style: none;
+}
+
+.timeline-part {
+  --part: var(--cyan-2);
+  display: grid;
+  flex-basis: 0;
+  gap: 0.12em;
+  min-width: 0;
+}
+
+.timeline-part.is-double {
+  --part: var(--elixir-2);
+}
+
+.timeline-part.is-sudden {
+  --part: var(--crimson-2);
+}
+
+.timeline-part i {
+  height: 0.5em;
+  margin-bottom: 0.3em;
+  border-radius: 1em;
+  background: linear-gradient(90deg, var(--part), color-mix(in srgb, var(--part) 55%, #fff));
+  box-shadow: 0 0 0.8em color-mix(in srgb, var(--part) 60%, transparent);
+}
+
+.timeline-part b {
+  font-size: 0.84em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  color: #fff;
+}
+
+.timeline-part span {
+  font-size: 0.62em;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: color-mix(in srgb, var(--part) 55%, #fff);
+}
+
+.phases {
+  display: grid;
+  gap: 0.6em;
+}
+
+.phase {
+  --phase: var(--elixir-2);
+  display: grid;
+  gap: 0.3em;
+  padding: 0.6em 1em 0.65em;
+  border: 1px solid color-mix(in srgb, var(--phase) 45%, transparent);
+  border-left-width: 3px;
+  border-radius: 0.7em;
+  background: linear-gradient(100deg, color-mix(in srgb, var(--phase) 13%, rgba(14, 20, 42, 0.7)), rgba(8, 12, 26, 0.4));
+}
+
+.phase.is-sudden {
+  --phase: var(--crimson-2);
+}
+
+.phase-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6em;
+}
+
+/* Controls: the keys on the left, what they do on the right. */
+.controls {
+  display: grid;
+  gap: 0.45em;
+}
+
+.control {
+  display: grid;
+  grid-template-columns: 10.6em minmax(0, 1fr);
+  align-items: center;
+  gap: 0.9em;
+  min-height: 3.5em;
+  padding: 0.35em 0.8em 0.35em 0.7em;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 0.7em;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.control-body {
+  display: grid;
+  gap: 0.1em;
+  min-width: 0;
+}
+
+.control .codex-name {
+  font-family: var(--font-ui);
+  font-size: 0.98em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 /* ---------------------------------------------------------------- Status bar */
@@ -1944,6 +2875,15 @@ body[data-stage='off'] .turn-hint {
 @keyframes cta-breathe {
   from { opacity: 0.35; scale: 0.94 0.8; }
   to { opacity: 0.9; scale: 1.02 1.05; }
+}
+
+@keyframes bar-in {
+  from { opacity: 0.4; scale: 0.985 0.9; }
+}
+
+@keyframes arming {
+  from { box-shadow: 0 0 0.7em rgba(240, 190, 80, 0.3), 0 0.5em 1em rgba(0, 0, 0, 0.55); }
+  to { box-shadow: 0 0 2em rgba(240, 190, 80, 0.8), 0 0.5em 1em rgba(0, 0, 0, 0.55); }
 }
 
 @keyframes locked-shake {

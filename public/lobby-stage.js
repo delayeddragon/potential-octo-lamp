@@ -47,8 +47,9 @@ const FLOOR = -1.3;
 const VIEWS = {
   play: { low: -1.45, high: 3.75, turn: -0.16, tilt: 0.03, yaw: 0.36 },
   heroes: { low: -0.62, high: 3.62, turn: 0.04, tilt: 0.01, yaw: 0.26 },
-  deck: { low: -1.45, high: 3.9, turn: 0.24, tilt: 0.05, yaw: 0.5 },
-  codex: { low: -1.45, high: 3.9, turn: 0.24, tilt: 0.05, yaw: 0.5 },
+  // On these two the champion is seen through the lobby's frosted sheet, standing in the middle of the hall.
+  deck: { low: -1.75, high: 4.25, turn: 0.1, tilt: 0.05, yaw: 0.3 },
+  codex: { low: -1.75, high: 4.25, turn: -0.1, tilt: 0.05, yaw: 0.2 },
 };
 
 /** The colours of the hall under each realm. Everything between the two is a blend. */

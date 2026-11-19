@@ -173,61 +173,90 @@
       <section class="screen screen-deck" id="screen-deck" role="tabpanel" aria-labelledby="tab-deck" hidden>
         <div class="hero-spot" aria-hidden="true"></div>
 
-        <section class="shell glass builder" aria-labelledby="builder-title">
-          <div class="shell-head">
-            <div class="shell-heading">
-              <span class="field-label">Deck</span>
-              <h2 class="shell-title" id="builder-title">Battle Deck</h2>
+        <div class="deck-main">
+          <section class="pane glass battle-deck" id="battle-deck" aria-labelledby="deck-title">
+            <div class="pane-head">
+              <h2 class="panel-title" id="deck-title">Active Battle Deck</h2>
+              <span class="count-pill" id="deck-count" title="Cards in the Battle Deck">6 / 6</span>
+              <span class="avg-badge" title="Average Elixir cost of the Battle Deck"><i class="elixir-drop" aria-hidden="true"></i><b id="deck-avg">–</b> Avg Elixir</span>
+              <ul class="mix" id="deck-mix" aria-label="Deck composition"></ul>
             </div>
-            <div class="builder-meta">
-              <span class="deck-count" id="deck-count">6 Cards</span>
-              <span class="avg-badge"><i class="elixir-drop" aria-hidden="true"></i><b id="deck-avg">–</b> Avg Elixir</span>
+            <div class="swap-bar" id="swap-bar">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h11l-3-3M17 17H6l3 3"/></svg>
+              <p class="swap-text" id="swap-text" role="status"></p>
+              <button class="btn btn-ghost btn-cancel-swap" id="btn-cancel-swap" type="button" hidden>Cancel</button>
+            </div>
+            <ul class="deck-row" id="deck" aria-labelledby="deck-title"></ul>
+          </section>
+
+          <section class="pane glass collection" aria-labelledby="collection-title">
+            <div class="pane-head">
+              <h2 class="panel-title" id="collection-title">Card Collection</h2>
+              <span class="count-pill" id="collection-count"></span>
+              <div class="filters" id="filters" role="group" aria-label="Show cards of one kind"></div>
+            </div>
+            <ul class="pool" id="collection" aria-labelledby="collection-title"></ul>
+          </section>
+        </div>
+
+        <aside class="pane glass inspector" id="inspector" aria-labelledby="inspect-name">
+          <span class="field-label">Card Inspector</span>
+          <div class="inspect-top">
+            <span class="inspect-art" id="inspect-art"></span>
+            <div class="inspect-id">
+              <div class="inspect-tags">
+                <span class="type-badge" id="inspect-type"></span>
+                <span class="zone-badge" id="inspect-zone"></span>
+              </div>
+              <h2 class="inspect-name" id="inspect-name"></h2>
+              <p class="inspect-tagline" id="inspect-tagline"></p>
+              <p class="inspect-cost"><span class="card-cost"><span id="inspect-cost"></span></span><span>Elixir</span></p>
+              <ul class="inspect-traits" id="inspect-traits" aria-label="Traits"></ul>
             </div>
           </div>
-
-          <ul class="deck" id="deck" aria-label="Battle Deck"></ul>
-          <div class="reserve">
-            <span class="field-label" id="reserve-title">Reserve</span>
-            <ul class="deck" id="reserve" aria-labelledby="reserve-title"></ul>
-          </div>
-          <p class="builder-hint" id="builder-hint" role="status"></p>
-
-          <p class="shell-note"><span class="soon-tag">Coming Soon</span>The full Deck Forge is on its way. Until it opens, swap cards here: your Battle Deck is saved as you go.</p>
-        </section>
+          <p class="inspect-desc" id="inspect-desc"></p>
+          <dl class="card-stats" id="inspect-stats"></dl>
+          <button class="btn btn-equip" id="btn-equip-card" type="button">
+            <span class="btn-face"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg><span id="equip-card-label">Equip into Deck</span></span>
+          </button>
+        </aside>
       </section>
 
       <!-- ................................................. CODEX -->
       <section class="screen screen-codex" id="screen-codex" role="tabpanel" aria-labelledby="tab-codex" hidden>
         <div class="hero-spot" aria-hidden="true"></div>
 
-        <section class="shell glass codex" aria-labelledby="codex-title">
-          <div class="shell-head">
-            <div class="shell-heading">
-              <span class="field-label">Codex</span>
-              <h2 class="shell-title" id="codex-title">Chronicle of the Realm</h2>
-            </div>
-            <span class="soon-tag">Coming Soon</span>
+        <section class="pane glass codex-col" style="--i: 0" aria-labelledby="codex-relics-title">
+          <div class="codex-head">
+            <span class="field-label">Codex · I</span>
+            <h2 class="panel-title" id="codex-relics-title">In-Match Relics</h2>
+            <span class="codex-keys" id="codex-relic-keys"></span>
           </div>
+          <ul class="relics" id="codex-relics"></ul>
+          <p class="codex-foot" id="codex-gold"></p>
+        </section>
 
-          <p class="shell-lead">The scribes are still at work. When the Codex opens, everything worth knowing before a battle will be written here.</p>
-          <ul class="codex-list">
-            <li class="codex-entry">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20v-8a7 7 0 0 1 14 0v8M9 20v-6h6v6M12 5V2.5"/></svg>
-              <strong>Champions</strong><span>The story and the kit of every hero</span>
-            </li>
-            <li class="codex-entry">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6.5h9.5a1.5 1.5 0 0 1 1.5 1.5v11.5a1.5 1.5 0 0 1-1.5 1.5H8a1.5 1.5 0 0 1-1.5-1.5V8A1.5 1.5 0 0 1 8 6.5ZM9.5 3.5h-3A1.5 1.5 0 0 0 5 5v11"/></svg>
-              <strong>Cards</strong><span>Every troop, spell and building</span>
-            </li>
-            <li class="codex-entry">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 19.5 12 12 21.5 4.5 12ZM12 8v8M9 12h6"/></svg>
-              <strong>Runes &amp; Relics</strong><span>What the River and the forge grant</span>
-            </li>
-            <li class="codex-entry">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 21V9l-1.5-1V4H7v1.5h3V4h4v1.5h3V4h2.5v4L18 9v12ZM10 21v-5a2 2 0 0 1 4 0v5"/></svg>
-              <strong>Battlefield</strong><span>The lanes, the Towers and the Ancient Throne</span>
-            </li>
-          </ul>
+        <section class="pane glass codex-col" style="--i: 1" aria-labelledby="codex-runes-title">
+          <div class="codex-head">
+            <span class="field-label">Codex · II</span>
+            <h2 class="panel-title" id="codex-runes-title">River Runes &amp; Match Phases</h2>
+          </div>
+          <p class="cadence" id="codex-cadence"></p>
+          <ul class="runes" id="codex-runes"></ul>
+          <ol class="timeline" id="codex-timeline" aria-label="The match clock"></ol>
+          <ul class="phases" id="codex-phases"></ul>
+        </section>
+
+        <section class="pane glass codex-col" style="--i: 2" aria-labelledby="codex-controls-title">
+          <div class="codex-head">
+            <span class="field-label">Codex · III</span>
+            <h2 class="panel-title" id="codex-controls-title">Controls &amp; Camera</h2>
+          </div>
+          <span class="field-label codex-sub">Hero &amp; Cards</span>
+          <ul class="controls" id="codex-controls"></ul>
+          <span class="field-label codex-sub">Camera</span>
+          <ul class="controls" id="codex-camera"></ul>
+          <p class="codex-foot" id="codex-more"></p>
         </section>
       </section>
     </main>

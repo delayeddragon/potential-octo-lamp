@@ -2,15 +2,17 @@
    RuneDeck — lobby client
    The navigation bar and the four screens behind its tabs (Play, Heroes, Deck
    and Codex), the 3D stage they are laid over (lobby-stage.js), and matchmaking.
+   The Codex's own page is written by codex.js.
    It also owns the sound engine, so that the first click anywhere on the page
    (Find Match, usually) is what allows the battle to be heard: it starts the
    lobby's music, gives the interface its ticks and clicks, and mounts the
    audio mixer in the navigation bar and in the match HUD.
    ========================================================================== */
 
+import { renderCodex } from './codex.js';
 import { bindMuteKey, createMixer } from './mixer.js';
 import { cardArt, iconArt, portraitArt } from './paint.js';
-import { CARDS, CHAMPIONS, CHAMPION_IDS, MATCH, sanitizeLoadout } from './shared.js';
+import { CARDS, CHAMPIONS, CHAMPION_IDS, MATCH, UNITS, sanitizeLoadout } from './shared.js';
 import { SoundEngine } from './sound.js';
 
 const NICK_STORAGE_KEY = 'runedeck.nickname';
@@ -143,11 +145,29 @@ const dom = {
   sheetKit: $('sheet-kit'),
   equipBtn: $('btn-equip'),
   equipLabel: $('equip-label'),
+  battleDeck: $('battle-deck'),
   deck: $('deck'),
-  reserve: $('reserve'),
-  builderHint: $('builder-hint'),
   deckCount: $('deck-count'),
   deckAvg: $('deck-avg'),
+  deckMix: $('deck-mix'),
+  swapBar: $('swap-bar'),
+  swapText: $('swap-text'),
+  cancelSwapBtn: $('btn-cancel-swap'),
+  filters: $('filters'),
+  collection: $('collection'),
+  collectionCount: $('collection-count'),
+  inspector: $('inspector'),
+  inspectArt: $('inspect-art'),
+  inspectType: $('inspect-type'),
+  inspectZone: $('inspect-zone'),
+  inspectName: $('inspect-name'),
+  inspectTagline: $('inspect-tagline'),
+  inspectCost: $('inspect-cost'),
+  inspectTraits: $('inspect-traits'),
+  inspectDesc: $('inspect-desc'),
+  inspectStats: $('inspect-stats'),
+  equipCardBtn: $('btn-equip-card'),
+  equipCardLabel: $('equip-card-label'),
   findBtn: $('btn-find'),
   conn: $('conn'),
   connText: $('conn-text'),
@@ -190,8 +210,12 @@ const state = {
   loadout: { hero: CHAMPION_IDS[0], deck: [], reserve: [] },
   /** The champion on show on the Heroes tab: looked over there, and taken into battle only once it is equipped. */
   inspect: CHAMPION_IDS[0],
-  /** The card picked up in the deck builder, waiting for the card it swaps with. */
-  pick: null,
+  /** The card in the deck screen's inspector. */
+  card: CARDS[0].id,
+  /** Swap Mode: the Reserve card in the inspector is waiting for the Battle Deck card it replaces. */
+  swapping: false,
+  /** Which of the collection is shown: 'all', or one card type. */
+  filter: 'all',
   resolveTimer: 0,
   countdownTimer: 0,
   pulseTimer: 0,
@@ -213,7 +237,7 @@ function setPhase(phase) {
   // Keep keyboard focus inside whichever overlay is open.
   dom.app.inert = phase !== 'lobby';
   // The loadout is locked while queueing and playing; a half-made swap is dropped.
-  if (phase !== 'lobby') clearPick();
+  if (phase !== 'lobby') setSwapping(false);
   for (const mixer of mixers) mixer.close();
   hideTooltip();
   // The battle has the whole machine: the stage draws nothing from the moment a match begins until the lobby is back.
@@ -325,7 +349,7 @@ function presentHero({ flourish = false } = {}) {
 /* -------------------------------------------------------------------------- */
 
 /** Buttons that say something of their own when pressed; the plain click would only muddy it. */
-const OWN_VOICE = '#btn-find, #btn-equip, .roster-card, .deck-card, .hand-card, .skill, .mixer-mute';
+const OWN_VOICE = '#btn-find, #btn-equip, #btn-equip-card, #btn-cancel-swap, .roster-card, .deck-card, .pool-card, .hand-card, .skill, .mixer-mute';
 /** The match's own controls are passed over many times a minute: they do not tick under the pointer. */
 const NO_HOVER = '.hand-card, .skill';
 
@@ -450,8 +474,8 @@ function cardTooltip(card) {
 function setTab(name, { focus = false } = {}) {
   if (!TABS.includes(name) || state.phase !== 'lobby') return;
   if (name !== state.tab) {
-    // A card picked up in the deck builder is put down when its screen is left.
-    clearPick();
+    // A swap left waiting for its slot is dropped when the deck screen is left.
+    setSwapping(false);
     hideTooltip();
     state.tab = name;
     document.body.dataset.tab = name;
@@ -467,6 +491,8 @@ function setTab(name, { focus = false } = {}) {
       markRoster();
       renderSheet({ replay: true });
     }
+    // The inspector's bars fill as its screen comes into view.
+    if (name === 'deck') renderInspector();
     stage.setView(name);
     presentHero();
   }
@@ -586,8 +612,11 @@ function initLoadout() {
   renderSheet();
   renderChampion();
   renderLoadoutDeck();
-  setBuilderHint(BUILDER_HINT);
-  renderBuilder({ intro: true });
+  state.card = state.loadout.deck[0];
+  renderFilters();
+  renderDeckBuilder({ intro: true });
+  renderInspector();
+  showSwapBar();
   presentHero();
 }
 
@@ -839,107 +868,345 @@ function equipChampion() {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Deck: pick a card, then the card in the other zone it swaps places with    */
+/* Deck: the Battle Deck, the collection and the card inspector               */
 /* -------------------------------------------------------------------------- */
 
-const BUILDER_HINT = 'Pick a Reserve card, then the Battle Deck card it replaces.';
+/** The collection's filters: every card, or the cards of one type. */
+const FILTERS = [
+  { id: 'all', label: `All (${CARDS.length})` },
+  { id: 'Troop', label: 'Troops' },
+  { id: 'Spell', label: 'Spells' },
+  { id: 'Building', label: 'Buildings' },
+];
+/** A card type, counted: one of it, and several. */
+const TYPE_NAMES = { Troop: ['Troop', 'Troops'], Spell: ['Spell', 'Spells'], Building: ['Building', 'Buildings'] };
+const DECK_HINT = 'Select any card to inspect it. A Reserve card can be equipped in place of one in the deck.';
+
+/** The unit a card puts on the field, if it puts one there. */
+const unitOf = (card) => (card.spawns ? UNITS[card.spawns] : null);
 
 /**
- * Draws both card lists. Cards in `flash` pulse (they just changed places); with
- * `intro` they deal in. Keyboard focus that was on a card moves to `focusId`,
- * because the buttons are replaced.
+ * What a full stat bar stands for: the largest figure of its kind in the whole
+ * card pool, so that one card's bars can be measured against another's.
  */
-function renderBuilder({ flash = [], intro = false, focusId = null } = {}) {
-  const hadFocus = document.activeElement?.closest('.builder') !== null && document.activeElement !== document.body;
-  hideTooltip();
-  for (const zone of ['deck', 'reserve']) {
-    dom[zone].replaceChildren(...state.loadout[zone].map((id, index) => builderCard(CARDS_BY_ID[id], zone, index, { swapped: flash.includes(id), intro })));
-  }
-  if (hadFocus && focusId) document.querySelector(`.builder [data-card="${focusId}"]`)?.focus();
-  const { deck } = state.loadout;
-  dom.deckCount.textContent = `${deck.length} / ${MATCH.deckSize} Cards`;
-  dom.deckAvg.textContent = averageCost(deck).toFixed(1);
+const STAT_SCALE = {
+  hp: Math.max(...CARDS.map((card) => unitOf(card)?.hp ?? 0)),
+  damage: Math.max(...CARDS.map((card) => unitOf(card)?.damage ?? card.damage ?? card.heal ?? 0)),
+  count: Math.max(...CARDS.map((card) => card.count ?? 0)),
+  reach: Math.max(...CARDS.map((card) => unitOf(card)?.range ?? card.radius)),
+};
+
+const figure = (value) => value.toLocaleString('en-US');
+const secondsOf = (ms) => `${Number((ms / 1000).toFixed(2))}s`;
+
+/** Who a card's blows, or its mending, fall on: as the simulation decides it (game.js). */
+function cardTargets(card, unit) {
+  if (card.heal) return ['Your Hero', 'Allied Troops'];
+  if (unit?.buildingsOnly) return ['Buildings only'];
+  const targets = ['Troops', 'Heroes'];
+  // A unit's blow is worth `siege` of itself against a building; a spell has its own figure for buildings.
+  // What stands still (a Frost Tower) never comes within reach of one.
+  if (!unit) targets.push(`Buildings · ${figure(card.structureDamage)} dmg`);
+  else if (unit.speed) targets.push(unit.siege < 1 ? `Buildings · ${Math.round(unit.siege * 100)}% dmg` : 'Buildings');
+  if (unit?.spin) targets.push(`All within ${unit.spin}`);
+  if (unit?.slow) targets.push(`Slows ${Math.round(unit.slow * 100)}%`);
+  return targets;
 }
 
-function builderCard(card, zone, index, { swapped, intro }) {
+/**
+ * A card's figures for the inspector, read from the rules the match runs on
+ * (`CARDS` and `UNITS`): none of them is written down a second time here. A row
+ * with `fill` (0..1) is drawn as a bar, and one with `badges` as a row of them.
+ */
+function cardStats(card) {
+  const unit = unitOf(card);
+  const rows = [];
+  if (unit) {
+    rows.push({ stat: 'hp', label: 'HP', value: figure(unit.hp), note: card.count > 1 ? 'each' : '', fill: unit.hp / STAT_SCALE.hp });
+    rows.push({ stat: 'damage', label: 'Damage', value: figure(unit.damage), note: `every ${secondsOf(unit.attackMs)}`, fill: unit.damage / STAT_SCALE.damage });
+    if (unit.lifetimeMs) rows.push({ stat: 'time', label: 'Duration', badges: [`${secondsOf(unit.lifetimeMs)} on the field`] });
+    else rows.push({ stat: 'count', label: 'Units', value: `×${card.count}`, note: '', fill: card.count / STAT_SCALE.count });
+    rows.push({ stat: 'reach', label: 'Range', value: String(unit.range), note: unit.shot || unit.beam ? 'Ranged' : 'Melee', fill: unit.range / STAT_SCALE.reach });
+  } else {
+    const amount = card.heal ?? card.damage;
+    rows.push({
+      stat: card.heal ? 'heal' : 'damage',
+      label: card.heal ? 'Healing' : 'Damage',
+      value: figure(amount),
+      note: card.heal ? 'to each ally' : 'to each enemy',
+      fill: amount / STAT_SCALE.damage,
+    });
+    rows.push({ stat: 'time', label: 'Effect', badges: [card.travelMs ? `Lands after ${secondsOf(card.travelMs)}` : 'Instant', ...(card.stunMs ? [`Stuns ${secondsOf(card.stunMs)}`] : [])] });
+    rows.push({ stat: 'reach', label: 'Radius', value: String(card.radius), note: 'Area', fill: card.radius / STAT_SCALE.reach });
+  }
+  rows.push({ stat: 'targets', label: 'Targets', badges: cardTargets(card, unit) });
+  rows.push({ stat: 'zone', label: 'Deploy', badges: [card.zone === 'own' ? 'Your side of the River' : 'Anywhere on the field'] });
+  return rows;
+}
+
+function statRow(row, index) {
+  const node = el('div', 'cstat');
+  node.dataset.stat = row.stat;
+  node.style.setProperty('--i', index);
+  const data = el('dd');
+  if (row.badges) {
+    data.classList.add('cstat-badges');
+    data.append(...row.badges.map((text) => el('span', 'cstat-badge', text)));
+  } else {
+    const track = el('span', 'meter-track');
+    track.append(el('i', 'meter-fill'));
+    data.append(track, el('b', 'cstat-value', row.value), el('span', 'cstat-note', row.note));
+  }
+  node.append(el('dt', '', row.label), data);
+  return node;
+}
+
+/** A card's Elixir cost in its orb, and its painted illustration. */
+function cardFace(card) {
+  const cost = el('span', 'card-cost');
+  cost.append(el('span', '', String(card.cost)));
+  const art = el('span', 'card-art');
+  art.append(painting(cardArt(card.id)));
+  return [cost, art];
+}
+
+/** One of the six slots of the Battle Deck. */
+function deckSlot(card, index, { swapped, intro }) {
   const item = el('li');
   const button = el('button', `deck-card type-${card.type.toLowerCase()}`);
   button.type = 'button';
   button.dataset.card = card.id;
   button.style.setProperty('--i', index);
-  const picked = state.pick === card.id;
-  const target = state.pick !== null && zoneOf(state.pick) !== zone;
-  button.classList.toggle('is-picked', picked);
-  button.classList.toggle('is-target', target);
   button.classList.toggle('just-swapped', swapped);
   button.classList.toggle('dealt', intro);
-  button.setAttribute('aria-pressed', String(picked));
-  const where = zone === 'deck' ? 'In your Battle Deck' : 'In your Reserve';
-  const action = picked ? 'Picked up. Press again to put it down' : target ? `Swap with ${CARDS_BY_ID[state.pick].name}` : 'Press to pick it up';
-  button.setAttribute('aria-label', `${card.name}: ${card.cost} Elixir, ${card.type}. ${where}. ${action}. ${card.tagline}. ${card.description}`);
-
-  const cost = el('span', 'card-cost');
-  cost.append(el('span', '', String(card.cost)));
-  const art = el('span', 'card-art');
-  art.append(painting(cardArt(card.id)));
-  button.append(cost, art, el('span', 'card-name', card.name));
-
-  button.addEventListener('click', () => onBuilderCard(card.id));
-  bindTooltip(button, () => cardTooltip(card));
+  button.append(...cardFace(card), el('span', 'card-name', card.name));
+  button.addEventListener('click', () => onDeckSlot(card.id));
   item.append(button);
   return item;
 }
 
-function setBuilderHint(text) {
-  setText(dom.builderHint, text);
+/** A card of the collection: every card in the pool has one, whether it is in the deck or in the Reserve. */
+function poolCard(card, index, { swapped, deal }) {
+  const inDeck = zoneOf(card.id) === 'deck';
+  const item = el('li');
+  const button = el('button', `pool-card type-${card.type.toLowerCase()} ${inDeck ? 'in-deck' : 'in-reserve'}`);
+  button.type = 'button';
+  button.dataset.card = card.id;
+  button.style.setProperty('--i', index);
+  button.classList.toggle('just-swapped', swapped);
+  button.classList.toggle('dealt', deal);
+
+  const thumb = el('span', 'pool-thumb');
+  thumb.append(...cardFace(card));
+  const text = el('span', 'pool-text');
+  text.append(el('span', 'pool-name', card.name), el('span', 'pool-type', card.type), el('span', inDeck ? 'zone-badge is-deck' : 'zone-badge', inDeck ? 'In Deck' : 'Reserve'));
+  button.append(thumb, text);
+  button.addEventListener('click', () => inspectCard(card.id));
+  item.append(button);
+  return item;
 }
 
-function onBuilderCard(id) {
-  if (state.phase !== 'lobby') return;
-  const { pick } = state;
-  const card = CARDS_BY_ID[id];
-
-  if (pick === id) {
-    sound.play('cardCancel');
-    clearPick();
-  } else if (pick === null || zoneOf(pick) === zoneOf(id)) {
-    sound.play('cardPick');
-    state.pick = id;
-    setBuilderHint(
-      zoneOf(id) === 'reserve'
-        ? `Which Battle Deck card does ${card.name} replace? Choose one.`
-        : `Which Reserve card takes ${card.name}'s place? Choose one.`,
-    );
-    renderBuilder({ focusId: id });
-  } else {
-    swapCards(pick, id);
+/** What is selected, and what a press would do, on every card of the deck screen. Nothing is redrawn. */
+function markCards() {
+  const incoming = CARDS_BY_ID[state.card];
+  for (const button of dom.screens.deck.querySelectorAll('[data-card]')) {
+    const card = CARDS_BY_ID[button.dataset.card];
+    const target = state.swapping && button.classList.contains('deck-card');
+    const inspected = card.id === state.card;
+    button.classList.toggle('is-inspected', inspected);
+    button.classList.toggle('is-target', target);
+    button.setAttribute('aria-pressed', String(inspected));
+    const where = zoneOf(card.id) === 'deck' ? 'In your Battle Deck' : 'In your Reserve';
+    const action = target ? `Replace it with ${incoming.name}` : inspected ? 'In the inspector' : 'Inspect it';
+    button.setAttribute('aria-label', `${card.name}: ${card.cost} Elixir, ${card.type}. ${where}. ${action}.`);
   }
 }
 
-/** Both cards exchange places, so the deck keeps its size and its different cards. */
-function swapCards(a, b) {
+/** The Battle Deck's header: how many cards, what they cost on average, and how many of each type. */
+function renderDeckHead() {
+  const { deck } = state.loadout;
+  setText(dom.deckCount, `${deck.length} / ${MATCH.deckSize}`);
+  setText(dom.deckAvg, averageCost(deck).toFixed(1));
+  dom.deckMix.replaceChildren(
+    ...Object.entries(TYPE_NAMES).map(([type, [one, many]]) => {
+      const count = deck.filter((id) => CARDS_BY_ID[id].type === type).length;
+      const pill = el('li', `mix-pill type-${type.toLowerCase()}`);
+      pill.classList.toggle('is-none', count === 0);
+      pill.append(el('b', '', String(count)), ` ${count === 1 ? one : many}`);
+      return pill;
+    }),
+  );
+}
+
+/** The cards the filter lets through. `flash` cards have just changed places; with `deal` they are dealt in. */
+function renderCollection({ flash = [], deal = false } = {}) {
+  const shown = CARDS.filter((card) => state.filter === 'all' || card.type === state.filter);
+  dom.collection.replaceChildren(...shown.map((card, index) => poolCard(card, index, { swapped: flash.includes(card.id), deal })));
+  setText(dom.collectionCount, shown.length === CARDS.length ? `${CARDS.length} Cards` : `${shown.length} of ${CARDS.length}`);
+  markCards();
+}
+
+function renderFilters() {
+  dom.filters.replaceChildren(
+    ...FILTERS.map(({ id, label }) => {
+      const button = el('button', 'filter', label);
+      button.type = 'button';
+      button.dataset.filter = id;
+      button.setAttribute('aria-pressed', String(id === state.filter));
+      button.addEventListener('click', () => setFilter(id));
+      return button;
+    }),
+  );
+}
+
+/** Shows the whole collection ('all') or the cards of one type. The click is heard as every button's is. */
+function setFilter(id) {
+  if (id === state.filter || state.phase !== 'lobby') return;
+  state.filter = id;
+  for (const button of dom.filters.children) button.setAttribute('aria-pressed', String(button.dataset.filter === id));
+  renderCollection({ deal: true });
+}
+
+/**
+ * Draws the Battle Deck and the collection. Cards in `flash` have just changed
+ * places; with `intro` the deck is dealt in. Keyboard focus that was on a card
+ * moves to `focusId`, because the buttons are replaced.
+ */
+function renderDeckBuilder({ flash = [], intro = false, focusId = null } = {}) {
+  const hadFocus = dom.screens.deck.contains(document.activeElement);
+  dom.deck.replaceChildren(...state.loadout.deck.map((id, index) => deckSlot(CARDS_BY_ID[id], index, { swapped: flash.includes(id), intro })));
+  renderDeckHead();
+  renderCollection({ flash, deal: intro });
+  markInspector();
+  if (hadFocus && focusId) dom.deck.querySelector(`[data-card="${focusId}"]`)?.focus();
+}
+
+/** The inspector, for the card on show: its art, what kind of card it is, and its figures. */
+function renderInspector() {
+  const card = CARDS_BY_ID[state.card];
+  dom.inspector.dataset.type = card.type.toLowerCase();
+  dom.inspectArt.replaceChildren(painting(cardArt(card.id)));
+  setText(dom.inspectType, card.type);
+  setText(dom.inspectName, card.name);
+  setText(dom.inspectTagline, card.tagline);
+  setText(dom.inspectCost, String(card.cost));
+  dom.inspectTraits.replaceChildren(...card.traits.map((trait) => el('li', '', trait)));
+  setText(dom.inspectDesc, card.description);
+
+  const stats = cardStats(card);
+  const rows = stats.map(statRow);
+  dom.inspectStats.replaceChildren(...rows);
+  // The bars are drawn empty and filled a moment later, so that each is seen to grow to its figure.
+  void dom.inspectStats.offsetWidth;
+  stats.forEach((row, i) => {
+    if (row.fill != null) rows[i].style.setProperty('--value', String(Math.min(1, row.fill)));
+  });
+  markInspector();
+}
+
+/** Where the card on show is kept, and what the button under it offers: to equip it, or the news that it is in the deck. */
+function markInspector() {
+  const inDeck = zoneOf(state.card) === 'deck';
+  setText(dom.inspectZone, inDeck ? 'In Deck' : 'Reserve');
+  dom.inspectZone.classList.toggle('is-deck', inDeck);
+  dom.equipCardBtn.classList.toggle('is-equipped', inDeck);
+  dom.equipCardBtn.classList.toggle('is-arming', state.swapping);
+  // Marked rather than disabled, as Equip Champion is: the keyboard stays where it was.
+  dom.equipCardBtn.setAttribute('aria-disabled', String(inDeck));
+  dom.equipCardBtn.setAttribute('aria-pressed', String(state.swapping));
+  setText(dom.equipCardLabel, inDeck ? 'In Battle Deck' : state.swapping ? 'Choose a Deck Slot' : 'Equip into Deck');
+}
+
+/** The line over the Battle Deck: the swap's prompt while one is being made, otherwise `message` or the standing hint. */
+function showSwapBar(message = DECK_HINT) {
+  dom.swapBar.classList.toggle('is-swapping', state.swapping);
+  dom.swapBar.classList.toggle('is-news', !state.swapping && message !== DECK_HINT);
+  dom.cancelSwapBtn.hidden = !state.swapping;
+  if (state.swapping) dom.swapText.replaceChildren('Click a card in your Battle Deck to replace with ', el('strong', '', CARDS_BY_ID[state.card].name));
+  else setText(dom.swapText, message);
+}
+
+/**
+ * Swap Mode: the Reserve card on show is waiting for the Battle Deck card it
+ * replaces, and the six slots say so. Returns whether anything changed.
+ */
+function setSwapping(next) {
+  if (state.swapping === next) return false;
+  state.swapping = next;
+  dom.battleDeck.classList.toggle('is-swapping', next);
+  markCards();
+  markInspector();
+  showSwapBar();
+  return true;
+}
+
+/** Calls a swap off. Returns whether there was one. */
+function cancelSwap() {
+  if (!setSwapping(false)) return false;
+  sound.play('cardCancel');
+  return true;
+}
+
+/** Puts a card in the inspector. A swap that was waiting for its slot is dropped: the player has looked elsewhere. */
+function inspectCard(id) {
+  if (state.phase !== 'lobby') return;
+  sound.play('cardPick');
+  setSwapping(false);
+  if (id !== state.card) {
+    state.card = id;
+    renderInspector();
+  }
+  markCards();
+  showSwapBar();
+}
+
+/** A slot of the Battle Deck was pressed: in Swap Mode it is the card to replace, otherwise it is looked at. */
+function onDeckSlot(id) {
+  if (state.phase !== 'lobby') return;
+  if (state.swapping) swapCards(state.card, id);
+  else inspectCard(id);
+}
+
+/** Equip into Deck: starts the swap for the Reserve card on show. Pressed again, it calls the swap off. */
+function onEquipCard() {
+  if (state.phase !== 'lobby' || zoneOf(state.card) === 'deck') return;
+  if (cancelSwap()) return;
+  sound.play('cardArm');
+  setSwapping(true);
+}
+
+/** The Reserve card takes the deck card's slot and the deck card its place in the Reserve: the deck keeps its size and its different cards. */
+function swapCards(incoming, outgoing) {
   // One card snaps into the deck, and the one it replaced lands in the Reserve a moment later.
   sound.play('cardEquip');
   sound.play('cardRemove', { delay: 0.13, gain: 0.8 });
   const { deck, reserve } = state.loadout;
-  const [inDeck, inReserve] = zoneOf(a) === 'deck' ? [a, b] : [b, a];
-  deck[deck.indexOf(inDeck)] = inReserve;
-  reserve[reserve.indexOf(inReserve)] = inDeck;
-  state.pick = null;
+  deck[deck.indexOf(outgoing)] = incoming;
+  reserve[reserve.indexOf(incoming)] = outgoing;
   storeLoadout();
-  setBuilderHint(`${CARDS_BY_ID[inReserve].name} joins the Battle Deck in place of ${CARDS_BY_ID[inDeck].name}.`);
-  renderBuilder({ flash: [inDeck, inReserve], focusId: b });
+  state.swapping = false;
+  dom.battleDeck.classList.remove('is-swapping');
+  renderDeckBuilder({ flash: [incoming, outgoing], focusId: incoming });
+  showSwapBar(`${CARDS_BY_ID[incoming].name} joins the Battle Deck in place of ${CARDS_BY_ID[outgoing].name}.`);
   renderLoadoutDeck();
 }
 
-/** Puts down the card picked up in the deck builder. Returns whether there was one. */
-function clearPick() {
-  if (state.pick === null) return false;
-  const id = state.pick;
-  state.pick = null;
-  setBuilderHint(BUILDER_HINT);
-  renderBuilder({ focusId: id });
-  return true;
+/**
+ * A Battle Deck is exactly `MATCH.deckSize` different cards from the pool, and
+ * a swap cannot make it anything else. Should it ever be, it is put right
+ * before a search rather than sent to the server. Returns whether it was sound.
+ */
+function ensureDeck() {
+  const { hero, deck } = state.loadout;
+  if (deck.length === MATCH.deckSize && new Set(deck).size === MATCH.deckSize && deck.every((id) => id in CARDS_BY_ID)) return true;
+  setLoadout({ hero, deck });
+  storeLoadout();
+  state.card = state.loadout.deck[0];
+  renderDeckBuilder();
+  renderInspector();
+  renderLoadoutDeck();
+  toast(`A Battle Deck is ${MATCH.deckSize} different cards. Yours was not, and has been reset to the starter deck.`, 'warn', 7_000);
+  return false;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -977,6 +1244,7 @@ function refreshFindButton() {
 
 function findMatch() {
   if (state.phase !== 'lobby' || !state.connected || !state.config) return;
+  if (!ensureDeck()) return;
   const nickname = commitNickname();
 
   setPhase('queue');
@@ -1398,6 +1666,8 @@ function initSocket() {
 
 dom.findBtn.addEventListener('click', findMatch);
 dom.equipBtn.addEventListener('click', equipChampion);
+dom.equipCardBtn.addEventListener('click', onEquipCard);
+dom.cancelSwapBtn.addEventListener('click', cancelSwap);
 dom.cancelBtn.addEventListener('click', cancelQueue);
 dom.spawnBotBtn.addEventListener('click', () => {
   if (state.phase === 'queue' && !state.match) socket.emit('queue:spawnBot');
@@ -1407,8 +1677,8 @@ dom.leaveBtn.addEventListener('click', leaveMatch);
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
   hideTooltip();
-  // Putting a card down and calling off the search are heard, as their buttons are.
-  if (clearPick()) sound.play('cardCancel');
+  // Calling off a swap and calling off the search are heard, as their buttons are.
+  cancelSwap();
   if (cancelQueue()) sound.play('uiClick');
 });
 window.addEventListener('resize', () => hideTooltip());
@@ -1417,6 +1687,7 @@ window.addEventListener('scroll', () => hideTooltip(), { passive: true });
 initTabs();
 initNickname();
 initLoadout();
+renderCodex();
 showQueueLimit();
 initSocket();
 loadConfig();
