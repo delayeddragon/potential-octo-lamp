@@ -1,0 +1,1964 @@
+/* ==========================================================================
+   RuneDeck — lobby
+   The navigation bar, the four screens behind its tabs (Play, Heroes, Deck and
+   Codex) and the status bar, laid over the 3D stage (lobby-stage.js).
+
+   Everything is sized in em from one viewport-driven font size, as the HUD is,
+   so the lobby is the same picture on every 16:9 screen: 1em is 16px at
+   1600 x 900, 12.8px at 1280 x 720 and 19.2px at 1920 x 1080. The lobby fills
+   the window exactly and nothing in it scrolls.
+   ========================================================================== */
+
+/* Registered, so that a change of realm is a cross-fade and not a cut. */
+@property --realm {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #2fd3f5;
+}
+
+@property --realm-soft {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #b8f6ff;
+}
+
+:root {
+  --ember-1: #ffc9a0;
+  --ember-2: #ff6a2a;
+  --ember-3: #8a1c10;
+}
+
+body {
+  /* The realm of the champion on the pedestal. What is coloured by it crosses over as the hall does. */
+  --realm: var(--cyan-2);
+  --realm-soft: var(--cyan-1);
+  /* A window too small for the lobby scrolls to the rest of it, sideways as well. */
+  overflow-x: auto;
+  transition: --realm 0.9s ease, --realm-soft 0.9s ease;
+}
+
+body[data-realm='dire'] {
+  --realm: var(--ember-2);
+  --realm-soft: var(--ember-1);
+}
+
+dl,
+dt,
+dd {
+  margin: 0;
+}
+
+/* ---------------------------------------------------------------- Stage */
+
+.stage-sky,
+#stage {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* The sky of the hall, painted: it holds the page until the stage is drawn, and for good where it cannot be. */
+.stage-sky {
+  overflow: hidden;
+  background: #02040a;
+}
+
+.stage-sky::before,
+.stage-sky::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transition: opacity 0.9s ease;
+}
+
+.stage-sky::before {
+  background:
+    radial-gradient(34% 30% at 40% 78%, rgba(36, 104, 255, 0.5), transparent 72%),
+    radial-gradient(90% 60% at 40% 100%, rgba(10, 35, 86, 0.9), transparent 75%),
+    linear-gradient(180deg, #01030a 0%, #050d24 58%, #081a40 100%);
+}
+
+.stage-sky::after {
+  opacity: 0;
+  background:
+    radial-gradient(34% 30% at 40% 78%, rgba(255, 74, 18, 0.45), transparent 72%),
+    radial-gradient(90% 60% at 40% 100%, rgba(74, 18, 6, 0.9), transparent 75%),
+    linear-gradient(180deg, #060202 0%, #1a0705 58%, #360c06 100%);
+}
+
+body[data-realm='dire'] .stage-sky::after {
+  opacity: 1;
+}
+
+#stage {
+  opacity: 0;
+  transition: opacity 1.1s ease;
+}
+
+body[data-stage='live'] #stage {
+  opacity: 1;
+}
+
+/* ---------------------------------------------------------------- Layout */
+
+.app {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  font-size: clamp(9px, min(1vw, 1.7778vh), 28px);
+  line-height: 1.3;
+}
+
+/* Shade round the edges of the picture, for the bars and the panels to sit on. */
+.app::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(90deg, rgba(2, 4, 10, 0.5), transparent 24%, transparent 60%, rgba(2, 4, 10, 0.55)),
+    linear-gradient(180deg, rgba(2, 4, 10, 0.45), transparent 22%, transparent 72%, rgba(2, 4, 10, 0.7));
+  pointer-events: none;
+}
+
+.app .field-label {
+  font-size: 0.7em;
+}
+
+.app .elixir-drop {
+  width: 0.72em;
+  height: 0.72em;
+  margin-right: 0.5em;
+  border-radius: 0.08em 50% 50% 50%;
+  box-shadow: 0 0 0.6em rgba(201, 75, 240, 0.8);
+}
+
+/* The lobby's glass is lighter than the overlays': the hall should show through it. */
+.app .glass {
+  border-radius: 1em;
+  background: linear-gradient(180deg, rgba(22, 31, 60, 0.66), rgba(7, 11, 25, 0.76));
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  backdrop-filter: blur(18px) saturate(150%);
+  box-shadow:
+    0 1.2em 3.2em rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.5);
+}
+
+/*
+ * A machine that struggles with the hall is spared the blur behind every panel, and behind the search and
+ * versus overlays that cover the whole of it (see `onQuality`, client.js). What is no longer blurred is darkened.
+ */
+body.lite .glass,
+body.lite .nav,
+body.lite .turn-hint,
+body.lite .overlay,
+body.lite .side-card {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+body.lite .app .glass,
+body.lite .overlay .glass {
+  background: linear-gradient(180deg, rgba(21, 29, 56, 0.93), rgba(7, 10, 22, 0.95));
+}
+
+body.lite .overlay {
+  background: radial-gradient(ellipse at center, rgba(5, 7, 15, 0.74), rgba(5, 7, 15, 0.95));
+}
+
+.panel-title {
+  font-family: var(--font-display);
+  font-size: 1.1em;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  color: var(--gold-1);
+  text-shadow: 0 0 1em rgba(227, 183, 85, 0.45);
+}
+
+/* The realm a champion hails from: a pill in that realm's colour. Without a realm of its own it takes the hall's. */
+.realm-tag {
+  --tag: var(--realm);
+  --tag-soft: var(--realm-soft);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6em;
+  flex: none;
+  padding: 0.3em 0.9em 0.22em 0.8em;
+  border: 1px solid color-mix(in srgb, var(--tag) 60%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tag) 14%, rgba(6, 9, 20, 0.6));
+  font-size: 0.68em;
+  font-weight: 700;
+  letter-spacing: 0.26em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--tag-soft);
+}
+
+.realm-tag::before {
+  content: '';
+  width: 0.5em;
+  height: 0.5em;
+  flex: none;
+  rotate: 45deg;
+  background: var(--tag);
+  box-shadow: 0 0 0.7em var(--tag);
+}
+
+.realm-tag[data-realm='radiant'] {
+  --tag: var(--cyan-2);
+  --tag-soft: var(--cyan-1);
+}
+
+.realm-tag[data-realm='dire'] {
+  --tag: var(--ember-2);
+  --tag-soft: var(--ember-1);
+}
+
+.soon-tag {
+  display: inline-block;
+  flex: none;
+  padding: 0.3em 0.85em 0.2em;
+  border: 1px dashed rgba(227, 183, 85, 0.6);
+  border-radius: 999px;
+  background: rgba(227, 183, 85, 0.08);
+  font-size: 0.64em;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--gold-1);
+}
+
+.avg-badge {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  padding: 0.24em 0.8em 0.16em 0.7em;
+  border: 1px solid rgba(201, 75, 240, 0.45);
+  border-radius: 999px;
+  background: rgba(201, 75, 240, 0.12);
+  font-size: 0.72em;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--elixir-1);
+}
+
+.avg-badge b {
+  margin-right: 0.4em;
+  font-size: 1.15em;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+}
+
+/* ---------------------------------------------------------------- Navigation bar */
+
+.nav {
+  position: relative;
+  /* Above the screens, so that the mixer's panel opens over them. */
+  z-index: 3;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: stretch;
+  height: 4.4em;
+  padding: 0 1.75em;
+  background: linear-gradient(180deg, rgba(4, 7, 16, 0.94), rgba(7, 11, 25, 0.7));
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  backdrop-filter: blur(14px) saturate(140%);
+  box-shadow: 0 0.5em 1.8em rgba(0, 0, 0, 0.5);
+  animation: drop-in 0.6s var(--ease-out) both;
+}
+
+/* Metallic hairline running Radiant cyan -> gold -> Dire crimson, as round the glass. */
+.nav::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--cyan-2) 14%, var(--gold-2) 50%, var(--crimson-2) 86%, transparent);
+  opacity: 0.75;
+  pointer-events: none;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.8em;
+  min-width: 0;
+}
+
+.brand-mark {
+  width: 2.75em;
+  height: 2.75em;
+  flex: none;
+  filter: drop-shadow(0 0 0.6em rgba(227, 183, 85, 0.45));
+}
+
+.brand-text {
+  display: grid;
+  gap: 0.1em;
+}
+
+.brand-name {
+  font-family: var(--font-display);
+  font-size: 1.34em;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  line-height: 1.1;
+  text-transform: uppercase;
+  background: linear-gradient(180deg, var(--gold-1), var(--gold-2) 55%, var(--gold-3));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.brand-sub {
+  font-size: 0.64em;
+  font-weight: 700;
+  letter-spacing: 0.36em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+/* `--at` is the place of the open tab, counted from the left: the underline slides to it. */
+.tabs {
+  --at: 0;
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, 8.8em);
+}
+
+body[data-tab='heroes'] .tabs {
+  --at: 1;
+}
+
+body[data-tab='deck'] .tabs {
+  --at: 2;
+}
+
+body[data-tab='codex'] .tabs {
+  --at: 3;
+}
+
+.tab {
+  appearance: none;
+  position: relative;
+  padding: 0.15em 0 0;
+  border: 0;
+  background: none;
+  font-size: 1.06em;
+  font-weight: 700;
+  letter-spacing: 0.28em;
+  /* Tracking adds its space after the last letter too: this puts the word back in the middle. */
+  text-indent: 0.28em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  cursor: pointer;
+  outline: none;
+  transition: color 0.2s ease, text-shadow 0.2s ease;
+}
+
+.tab::before {
+  content: '';
+  position: absolute;
+  inset: 0.7em 0.35em;
+  border-radius: 0.5em;
+  background: linear-gradient(180deg, rgba(184, 246, 255, 0), rgba(47, 211, 245, 0.12));
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.tab:hover,
+.tab:focus-visible {
+  color: var(--text);
+}
+
+.tab:hover::before,
+.tab:focus-visible::before {
+  opacity: 1;
+}
+
+.tab:focus-visible::before {
+  box-shadow: inset 0 0 0 2px rgba(184, 246, 255, 0.7);
+}
+
+.tab[aria-selected='true'] {
+  color: #fff;
+  text-shadow:
+    0 0 0.9em rgba(47, 211, 245, 0.8),
+    0 0 0.4em rgba(255, 241, 184, 0.55);
+}
+
+.tabs::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 25%;
+  height: 0.2em;
+  border-radius: 0.2em 0.2em 0 0;
+  background: linear-gradient(90deg, transparent, var(--gold-2) 16%, var(--gold-1) 42%, var(--cyan-1) 58%, var(--cyan-2) 84%, transparent);
+  box-shadow:
+    0 0 0.8em rgba(47, 211, 245, 0.9),
+    0 0 1.6em rgba(227, 183, 85, 0.65);
+  transform: translateX(calc(var(--at) * 100%));
+  transition: transform 0.4s var(--ease-out);
+  pointer-events: none;
+}
+
+.nav-tools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.7em;
+  min-width: 0;
+}
+
+/* Nickname: a pill that is a text field. */
+.nick {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  height: 2.6em;
+  padding: 0 0.85em 0 0.8em;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  background: rgba(8, 12, 26, 0.85);
+  color: var(--text-dim);
+  cursor: text;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.nick:hover {
+  border-color: rgba(184, 246, 255, 0.5);
+}
+
+.nick:focus-within {
+  border-color: var(--cyan-2);
+  box-shadow:
+    0 0 0 1px rgba(47, 211, 245, 0.35),
+    0 0 1.2em rgba(47, 211, 245, 0.3);
+}
+
+.nick svg {
+  width: 1.05em;
+  height: 1.05em;
+  flex: none;
+}
+
+.nick-mark {
+  color: var(--cyan-2);
+}
+
+.nick input {
+  width: 9.4em;
+  min-width: 0;
+  padding: 0.1em 0 0;
+  border: 0;
+  outline: none;
+  background: none;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+
+.nick input::placeholder {
+  font-weight: 600;
+  color: var(--text-dim);
+  opacity: 0.85;
+}
+
+.nick-edit {
+  opacity: 0.55;
+  transition: opacity 0.2s ease, color 0.2s ease;
+}
+
+.nick:hover .nick-edit,
+.nick:focus-within .nick-edit {
+  opacity: 1;
+  color: var(--gold-1);
+}
+
+.nav .mixer {
+  height: 2.6em;
+}
+
+/* ---------------------------------------------------------------- Screens */
+
+.screens {
+  position: relative;
+  min-height: 0;
+}
+
+.screen {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  column-gap: 1.5em;
+  padding: 1.3em 1.75em 1.2em;
+}
+
+/* The box a screen keeps clear for the champion: the stage stands it there (`spot`, lobby-stage.js). */
+.hero-spot {
+  position: absolute;
+  pointer-events: none;
+}
+
+/* ---------------------------------------------------------------- Play */
+
+.screen-play {
+  grid-template-columns: minmax(0, 1fr) 30em;
+  align-items: center;
+}
+
+/* A wide shot, the champion a little left of the middle: the right of the screen is the loadout's. */
+.screen-play .hero-spot {
+  top: 3em;
+  bottom: 4.5em;
+  left: calc(38% - 20em);
+  width: 40em;
+}
+
+.nameplate {
+  position: absolute;
+  top: 2.2em;
+  left: 2.6em;
+  display: grid;
+  justify-items: start;
+  gap: 0.35em;
+  pointer-events: none;
+  animation: slide-from-left 0.6s var(--ease-out) both;
+}
+
+.nameplate-name {
+  font-family: var(--font-display);
+  font-size: 2.7em;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  line-height: 1.08;
+  text-transform: uppercase;
+  background: linear-gradient(180deg, #fff 20%, var(--realm-soft) 62%, var(--realm));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 0.5em color-mix(in srgb, var(--realm) 50%, transparent)) drop-shadow(0 0.08em 0.1em rgba(0, 0, 0, 0.8));
+}
+
+.nameplate-title {
+  padding-left: 0.2em;
+  font-size: 0.92em;
+  font-weight: 700;
+  letter-spacing: 0.36em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  text-shadow: 0 1px 0.4em rgba(0, 0, 0, 0.9);
+}
+
+.play-side {
+  grid-column: 2;
+  display: grid;
+  gap: 1.5em;
+  min-width: 0;
+  animation: slide-from-right 0.55s var(--ease-out) both;
+}
+
+.loadout {
+  display: grid;
+  gap: 1.05em;
+  padding: 1.35em 1.5em 1.45em;
+}
+
+.loadout .panel-title {
+  padding-bottom: 0.8em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.loadout-part {
+  display: grid;
+  gap: 0.65em;
+}
+
+.loadout-part + .loadout-part {
+  padding-top: 1em;
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.loadout-head {
+  display: flex;
+  align-items: center;
+  gap: 0.7em;
+  min-height: 1.5em;
+}
+
+.loadout-head .btn-link {
+  margin-left: auto;
+}
+
+.loadout-hero {
+  display: flex;
+  align-items: center;
+  gap: 0.9em;
+}
+
+.loadout-portrait {
+  width: 4.6em;
+  height: 4.6em;
+  flex: none;
+  overflow: hidden;
+  border: 1.5px solid var(--gold-2);
+  border-radius: 0.8em;
+  background: var(--bg-1);
+  box-shadow:
+    0 0 1.3em color-mix(in srgb, var(--realm) 45%, transparent),
+    0 0.4em 0.9em rgba(0, 0, 0, 0.5);
+}
+
+.loadout-portrait img,
+.roster-portrait img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.loadout-who {
+  display: grid;
+  gap: 0.15em;
+  min-width: 0;
+  margin-right: auto;
+}
+
+.loadout-name {
+  font-family: var(--font-display);
+  font-size: 1.4em;
+  font-weight: 700;
+  line-height: 1.12;
+  color: #fff;
+}
+
+.loadout-role {
+  font-size: 0.78em;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--realm-soft);
+}
+
+/* The Battle Deck in small. Room is left above and to the left for the cost badges. */
+.mini-deck {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.55em;
+  padding: 0.4em 0 0 0.4em;
+}
+
+.mini-card,
+.deck-card {
+  --frame: var(--gold-2);
+  --frame-glow: rgba(227, 183, 85, 0.6);
+  --tint: rgba(227, 183, 85, 0.2);
+}
+
+.mini-card.type-spell,
+.deck-card.type-spell {
+  --frame: var(--crimson-2);
+  --frame-glow: rgba(240, 65, 58, 0.6);
+  --tint: rgba(240, 65, 58, 0.2);
+}
+
+.mini-card.type-building,
+.deck-card.type-building {
+  --frame: var(--cyan-2);
+  --frame-glow: rgba(47, 211, 245, 0.6);
+  --tint: rgba(47, 211, 245, 0.2);
+}
+
+.mini-card {
+  position: relative;
+  aspect-ratio: 3 / 4;
+  border: 1.5px solid var(--frame);
+  border-radius: 0.5em;
+  background: #0a0f22;
+  box-shadow: 0 0.3em 0.7em rgba(0, 0, 0, 0.5);
+  transition: transform 0.18s var(--ease-out), box-shadow 0.18s ease;
+}
+
+.mini-card:hover {
+  z-index: 1;
+  transform: translateY(-0.2em) scale(1.06);
+  box-shadow:
+    0 0.6em 1.1em rgba(0, 0, 0, 0.6),
+    0 0 1.1em var(--frame-glow);
+}
+
+.mini-card .card-art {
+  border-radius: 0.4em;
+}
+
+.mini-card .card-art::after {
+  content: none;
+}
+
+.mini-card .card-cost {
+  top: -0.5em;
+  left: -0.5em;
+  font-size: 0.72em;
+}
+
+.mode-pill {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0 0.6em;
+  padding: 0.6em 1em 0.5em;
+  border: 1px solid rgba(227, 183, 85, 0.32);
+  border-radius: 1.3em;
+  background: linear-gradient(90deg, rgba(47, 211, 245, 0.1), rgba(227, 183, 85, 0.1) 50%, rgba(240, 65, 58, 0.1));
+  font-size: 0.76em;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  line-height: 1.35;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.mode-pill svg {
+  width: 1.3em;
+  height: 1.3em;
+  flex: none;
+  fill: none;
+  stroke: var(--gold-2);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.mode-pill i {
+  font-style: normal;
+  color: var(--gold-2);
+}
+
+.mode-pill b {
+  font-variant-numeric: tabular-nums;
+  color: var(--gold-1);
+}
+
+/* Find Match: the one golden thing on the screen, and never quite still. */
+.cta {
+  position: relative;
+  filter: drop-shadow(0 0.6em 1em rgba(0, 0, 0, 0.65));
+}
+
+.cta::before {
+  content: '';
+  position: absolute;
+  inset: -0.9em -0.6em;
+  z-index: -1;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(255, 205, 96, 0.6), rgba(255, 205, 96, 0) 100%);
+  animation: cta-breathe 2.4s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+.cta:has(.btn-find:disabled)::before {
+  display: none;
+}
+
+.btn-find {
+  --notch: 1.5em;
+  display: block;
+  width: 100%;
+  padding: 0.2em;
+  background: linear-gradient(180deg, #fff8dc, #b98a2c 50%, #5f400d);
+  clip-path: polygon(var(--notch) 0, calc(100% - var(--notch)) 0, 100% 50%, calc(100% - var(--notch)) 100%, var(--notch) 100%, 0 50%);
+}
+
+.btn-find .btn-face {
+  /* The face's own notch, in its larger type: the two slanted edges run parallel. */
+  --notch: 0.76em;
+  position: relative;
+  display: block;
+  overflow: hidden;
+  padding: 0.58em 1em 0.5em;
+  background: linear-gradient(180deg, #ffeeb0 0%, #f2c655 38%, #c58d27 62%, #94640f 100%);
+  clip-path: polygon(var(--notch) 0, calc(100% - var(--notch)) 0, 100% 50%, calc(100% - var(--notch)) 100%, var(--notch) 100%, 0 50%);
+  font-family: var(--font-display);
+  font-size: 1.8em;
+  font-weight: 900;
+  letter-spacing: 0.24em;
+  text-indent: 0.24em;
+  line-height: 1.2;
+  white-space: nowrap;
+  color: #2b1a02;
+  text-shadow: 0 1px 0 rgba(255, 246, 205, 0.75);
+}
+
+.btn-find .btn-face::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -60%;
+  width: 38%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.7), transparent);
+  transform: skewX(-20deg);
+  animation: sheen 3.8s ease-in-out infinite;
+}
+
+.btn-find:hover:not(:disabled) .btn-face {
+  background: linear-gradient(180deg, #fff6cf 0%, #ffd668 38%, #d79c2f 62%, #a06c10 100%);
+}
+
+.btn-find:disabled {
+  filter: grayscale(0.85) brightness(0.6);
+}
+
+.btn-find:disabled .btn-face::after {
+  animation: none;
+}
+
+/* A quiet button that leads to another screen: a word and an arrow. */
+.btn-link {
+  flex: none;
+  padding: 0.3em 0.1em 0.2em;
+  background: none;
+  font-size: 0.74em;
+  letter-spacing: 0.14em;
+  white-space: nowrap;
+  color: var(--cyan-1);
+}
+
+.btn-link span {
+  display: inline-block;
+  margin-left: 0.2em;
+  transition: translate 0.2s var(--ease-out);
+}
+
+.btn-link:hover,
+.btn-link:focus-visible {
+  color: #fff;
+  text-shadow: 0 0 0.9em rgba(47, 211, 245, 0.9);
+}
+
+.btn-link:hover span,
+.btn-link:focus-visible span {
+  translate: 0.3em 0;
+}
+
+/* ---------------------------------------------------------------- Heroes */
+
+.screen-heroes {
+  grid-template-columns: 20em minmax(0, 1fr) 29.5em;
+  align-items: start;
+}
+
+.roster {
+  display: grid;
+  gap: 0.9em;
+  padding: 1.25em 1.1em 1.2em;
+  animation: slide-from-left 0.55s var(--ease-out) both;
+}
+
+.panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1em;
+  padding: 0 0.25em 0.8em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.panel-count {
+  font-size: 0.78em;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+}
+
+.roster-list {
+  display: grid;
+  gap: 0.6em;
+}
+
+/* `--card` is the colour of the champion's realm. */
+.roster-card {
+  --card: var(--cyan-2);
+  appearance: none;
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.2em 0.85em;
+  width: 100%;
+  padding: 0.5em 0.7em 0.5em 0.5em;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 0.85em;
+  background: linear-gradient(100deg, rgba(22, 31, 60, 0.72), rgba(8, 12, 26, 0.6));
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+  transition: transform 0.2s var(--ease-out), border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.roster-card[data-realm='dire'] {
+  --card: var(--ember-2);
+}
+
+.roster-card:not(.is-locked):hover,
+.roster-card:not(.is-locked):focus-visible {
+  border-color: color-mix(in srgb, var(--card) 75%, transparent);
+  transform: translateX(0.25em);
+}
+
+.roster-card:focus-visible {
+  box-shadow: 0 0 0 2px var(--cyan-1);
+}
+
+.roster-card[aria-checked='true'] {
+  border-color: var(--gold-2);
+  background: linear-gradient(100deg, color-mix(in srgb, var(--card) 26%, rgba(12, 18, 40, 0.9)), rgba(8, 12, 26, 0.75));
+  box-shadow:
+    0 0 0 1px rgba(227, 183, 85, 0.45),
+    0 0 1.5em color-mix(in srgb, var(--card) 40%, transparent);
+}
+
+.roster-card[aria-checked='true']:focus-visible {
+  box-shadow:
+    0 0 0 2px var(--cyan-1),
+    0 0 1.5em color-mix(in srgb, var(--card) 40%, transparent);
+}
+
+/* A bar of the realm's colour down the edge of the champion on show. */
+.roster-card[aria-checked='true']::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  bottom: 20%;
+  left: -1px;
+  width: 0.22em;
+  border-radius: 0 0.2em 0.2em 0;
+  background: var(--card);
+  box-shadow: 0 0 0.8em var(--card);
+}
+
+.roster-portrait {
+  position: relative;
+  grid-row: 1 / 3;
+  width: 4.3em;
+  height: 4.3em;
+  overflow: hidden;
+  border: 1.5px solid color-mix(in srgb, var(--card) 70%, #000);
+  border-radius: 0.7em;
+  background: var(--bg-1);
+}
+
+.roster-text {
+  display: grid;
+  gap: 0.15em;
+  align-self: end;
+  min-width: 0;
+}
+
+.roster-name {
+  font-family: var(--font-display);
+  font-size: 1.1em;
+  font-weight: 700;
+  line-height: 1.15;
+  color: #fff;
+}
+
+.roster-role {
+  font-size: 0.72em;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--card) 55%, #fff);
+}
+
+/* Under the name: the equipped champion's flag, or a locked one's promise. */
+.roster-flag,
+.roster-card .soon-tag {
+  grid-column: 2;
+  align-self: start;
+  justify-self: start;
+}
+
+.roster-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+  font-size: 0.64em;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  color: var(--gold-1);
+}
+
+.roster-flag::before {
+  content: '';
+  width: 0.5em;
+  height: 0.5em;
+  border-radius: 50%;
+  background: var(--gold-2);
+  box-shadow: 0 0 0.7em var(--gold-2);
+}
+
+/* A champion that is neither equipped nor locked has nothing under its name: the name sits in the middle. */
+.roster-card:has(.roster-flag[hidden]) .roster-text {
+  grid-row: 1 / 3;
+  align-self: center;
+}
+
+/* Still to come: a silhouette behind a lock. */
+.roster-card.is-locked {
+  border-style: dashed;
+  border-color: rgba(255, 255, 255, 0.14);
+  background: linear-gradient(100deg, rgba(14, 20, 40, 0.55), rgba(6, 9, 20, 0.5));
+  cursor: default;
+}
+
+.roster-card.is-locked .roster-portrait {
+  border-color: color-mix(in srgb, var(--card) 35%, #000);
+  background: radial-gradient(90% 80% at 50% 30%, color-mix(in srgb, var(--card) 30%, #060a16), #04060e 85%);
+}
+
+.roster-card.is-locked svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.roster-card.is-locked .bust {
+  fill: #05080f;
+  stroke: color-mix(in srgb, var(--card) 55%, transparent);
+  stroke-width: 1;
+}
+
+.roster-card.is-locked .mark {
+  fill: none;
+  stroke: color-mix(in srgb, var(--card) 70%, transparent);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.roster-lock {
+  position: absolute;
+  right: 0.2em;
+  bottom: 0.2em;
+  width: 1.5em;
+  height: 1.5em;
+  padding: 0.22em;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  background: rgba(4, 6, 14, 0.88);
+}
+
+.roster-lock svg {
+  fill: none;
+  stroke: var(--gold-1);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.roster-card.is-locked .roster-name {
+  color: #b9c3de;
+}
+
+.roster-card.is-locked .roster-role {
+  color: color-mix(in srgb, var(--card) 45%, var(--text-dim));
+}
+
+.roster-card.is-denied {
+  animation: locked-shake 0.34s ease both;
+}
+
+/* The middle of the screen is the champion's: the whole of it turns the model. */
+.inspect {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  justify-items: center;
+  align-self: stretch;
+  gap: 0.5em;
+  min-height: 0;
+}
+
+.hero-turn {
+  position: relative;
+  width: 100%;
+  min-height: 0;
+  border-radius: 1em;
+  cursor: grab;
+  outline: none;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.hero-turn.is-turning {
+  cursor: grabbing;
+}
+
+.hero-turn:focus-visible {
+  box-shadow: inset 0 0 0 2px rgba(184, 246, 255, 0.45);
+}
+
+.hero-turn .hero-spot {
+  inset: 0;
+}
+
+.turn-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65em;
+  padding: 0.5em 1.2em 0.42em 1em;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(6, 9, 20, 0.6);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  font-size: 0.74em;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  line-height: 1.4;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--text-dim);
+  pointer-events: none;
+  animation: fade-in 0.8s ease 0.3s both;
+}
+
+.turn-hint svg {
+  width: 1.55em;
+  height: 1.55em;
+  flex: none;
+  fill: none;
+  stroke: var(--realm-soft);
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Without a stage there is nothing to turn. */
+body[data-stage='off'] .turn-hint {
+  visibility: hidden;
+}
+
+/* The champion sheet. `--sheet` is the colour of the realm of the champion on it. */
+.sheet {
+  --sheet: var(--cyan-2);
+  --sheet-soft: var(--cyan-1);
+  display: flex;
+  flex-direction: column;
+  align-self: stretch;
+  gap: 0.8em;
+  min-height: 0;
+  padding: 1.3em 1.5em 1.35em;
+  animation: slide-from-right 0.55s var(--ease-out) both;
+}
+
+.sheet[data-realm='dire'] {
+  --sheet: var(--ember-2);
+  --sheet-soft: var(--ember-1);
+}
+
+.sheet-tags {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+}
+
+.role-tag {
+  padding: 0.3em 0.9em 0.22em;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 0.68em;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: #c9d2ea;
+}
+
+.sheet-name {
+  margin-top: -0.1em;
+  font-family: var(--font-display);
+  font-size: 1.95em;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  line-height: 1.1;
+  text-transform: uppercase;
+  background: linear-gradient(180deg, #fff 25%, var(--sheet-soft) 70%, var(--sheet));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.sheet-lore {
+  margin-top: -0.35em;
+  font-size: 0.9em;
+  line-height: 1.4;
+  color: #c9d2ea;
+}
+
+/* Stat bars: each fills to `--value` (0..1), one after the other. */
+.meters {
+  display: grid;
+  gap: 0.55em;
+  padding: 0.85em 0 0.2em;
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.meter {
+  --bar-1: #2fe08a;
+  --bar-2: #b6ffd6;
+  display: grid;
+  grid-template-columns: 5.4em minmax(0, 1fr);
+  align-items: center;
+}
+
+.meter[data-stat='mana'] {
+  --bar-1: #3f8dff;
+  --bar-2: #b5dcff;
+}
+
+.meter[data-stat='attack'] {
+  --bar-1: var(--crimson-2);
+  --bar-2: #ffc39a;
+}
+
+.meter[data-stat='mobility'] {
+  --bar-1: var(--gold-2);
+  --bar-2: var(--gold-1);
+}
+
+.meter dt {
+  font-size: 0.74em;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.meter dd {
+  display: flex;
+  align-items: center;
+  gap: 0.8em;
+}
+
+.meter-track {
+  position: relative;
+  flex: 1;
+  height: 0.5em;
+  overflow: hidden;
+  border-radius: 1em;
+  background: rgba(255, 255, 255, 0.09);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+.meter-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--bar-1), var(--bar-2));
+  box-shadow: 0 0 0.8em var(--bar-1);
+  transform: scaleX(var(--value, 0));
+  transform-origin: left center;
+  transition: transform 0.9s var(--ease-out) calc(var(--i, 0) * 80ms);
+}
+
+/* Emptied in one step, so that the fill which follows is seen from nothing. */
+.meter.is-reset .meter-fill {
+  transition: none;
+}
+
+/* Notches every tenth, cut over the fill. */
+.meter-track::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(90deg, transparent 0 calc(10% - 1px), rgba(4, 6, 14, 0.75) calc(10% - 1px) 10%);
+}
+
+.meter-value {
+  width: 1.9em;
+  font-size: 0.86em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-align: right;
+  color: #fff;
+}
+
+.kit {
+  display: grid;
+  gap: 0.55em;
+  margin-top: -0.3em;
+}
+
+.kit-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.9em;
+  padding: 0.58em 0.8em 0.58em 0.6em;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 0.75em;
+  background: linear-gradient(100deg, rgba(24, 33, 62, 0.62), rgba(8, 12, 26, 0.45));
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+  animation: card-in 0.45s var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 60ms + 80ms);
+}
+
+.kit-card:hover,
+.kit-card:focus-visible {
+  border-color: color-mix(in srgb, var(--sheet) 75%, transparent);
+  box-shadow: 0 0 1.2em color-mix(in srgb, var(--sheet) 28%, transparent);
+}
+
+.kit-card.is-ultimate {
+  border-color: rgba(227, 183, 85, 0.5);
+  background: linear-gradient(100deg, rgba(227, 183, 85, 0.16), rgba(8, 12, 26, 0.45) 70%);
+}
+
+.kit-icon {
+  position: relative;
+  width: 3.1em;
+  height: 3.1em;
+  flex: none;
+  border: 1.5px solid var(--gold-2);
+  border-radius: 0.6em;
+  background: var(--bg-1);
+  box-shadow: 0 0.3em 0.7em rgba(0, 0, 0, 0.5);
+}
+
+.kit-icon img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 0.5em;
+  object-fit: cover;
+}
+
+.kit-icon kbd {
+  position: absolute;
+  top: -0.5em;
+  left: -0.5em;
+  display: grid;
+  place-items: center;
+  width: 1.55em;
+  height: 1.55em;
+  border: 1px solid rgba(227, 183, 85, 0.6);
+  border-bottom-width: 2px;
+  border-radius: 0.3em;
+  background: var(--bg-1);
+  font-family: var(--font-ui);
+  font-size: 0.72em;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--gold-1);
+}
+
+.kit-body {
+  display: grid;
+  gap: 0.1em;
+  min-width: 0;
+}
+
+.kit-head {
+  display: flex;
+  align-items: center;
+  gap: 0.7em;
+}
+
+.kit-name {
+  margin-right: auto;
+  overflow: hidden;
+  font-size: 1em;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #fff;
+}
+
+.kit-card.is-ultimate .kit-name {
+  color: var(--gold-1);
+}
+
+.kit-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  flex: none;
+  font-size: 0.8em;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.kit-stat span {
+  display: block;
+  width: 1.05em;
+  height: 1.05em;
+}
+
+.kit-stat svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.kit-mana {
+  color: #9fd0ff;
+}
+
+.kit-mana svg {
+  fill: #3f8dff;
+  filter: drop-shadow(0 0 0.25em rgba(63, 141, 255, 0.9));
+}
+
+.kit-cooldown {
+  color: var(--text-dim);
+}
+
+.kit-cooldown svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.kit-brief {
+  font-size: 0.8em;
+  line-height: 1.25;
+  color: #b4bfdc;
+}
+
+/* Equip Champion: gold while there is something to equip, a quiet word once it is done. */
+.btn-equip {
+  display: block;
+  flex: none;
+  width: 100%;
+  margin-top: auto;
+  padding: 0.14em;
+  border-radius: 0.7em;
+  background: linear-gradient(180deg, #fff8dc, #b98a2c 50%, #5f400d);
+  box-shadow:
+    0 0 1.5em rgba(240, 190, 80, 0.4),
+    0 0.5em 1em rgba(0, 0, 0, 0.55);
+}
+
+.btn-equip .btn-face {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6em;
+  overflow: hidden;
+  padding: 0.66em 1em 0.56em;
+  border-radius: 0.5em;
+  background: linear-gradient(180deg, #ffeeb0 0%, #f2c655 38%, #c58d27 62%, #94640f 100%);
+  font-family: var(--font-display);
+  font-size: 1.14em;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+  line-height: 1.2;
+  white-space: nowrap;
+  color: #2b1a02;
+  text-shadow: 0 1px 0 rgba(255, 246, 205, 0.75);
+}
+
+.btn-equip .btn-face::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -60%;
+  width: 30%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.65), transparent);
+  transform: skewX(-20deg);
+  animation: sheen 3.8s ease-in-out 1s infinite;
+}
+
+.btn-equip svg {
+  display: none;
+  width: 1.15em;
+  height: 1.15em;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.btn-equip:hover:not(.is-equipped) .btn-face {
+  background: linear-gradient(180deg, #fff6cf 0%, #ffd668 38%, #d79c2f 62%, #a06c10 100%);
+}
+
+.btn-equip.is-equipped {
+  background: linear-gradient(180deg, rgba(125, 255, 184, 0.75), rgba(20, 96, 64, 0.75));
+  box-shadow: 0 0.5em 1em rgba(0, 0, 0, 0.45);
+  cursor: default;
+}
+
+.btn-equip.is-equipped:active {
+  transform: none;
+}
+
+.btn-equip.is-equipped .btn-face {
+  background: linear-gradient(180deg, #10302a, #081a1c);
+  color: #8dffc2;
+  text-shadow: 0 0 0.8em rgba(77, 255, 160, 0.6);
+}
+
+.btn-equip.is-equipped .btn-face::after {
+  content: none;
+}
+
+.btn-equip.is-equipped svg {
+  display: block;
+}
+
+/* ---------------------------------------------------------------- Deck and Codex */
+
+/* These two are shells until they are built in full: a frosted pane beside the champion. */
+.screen-deck,
+.screen-codex {
+  grid-template-columns: minmax(0, 1fr) 58em;
+  align-items: center;
+}
+
+.screen-deck .hero-spot,
+.screen-codex .hero-spot {
+  top: 3em;
+  bottom: 4.5em;
+  left: calc(19.5% - 17em);
+  width: 34em;
+}
+
+.shell {
+  grid-column: 2;
+  display: grid;
+  gap: 1.2em;
+  min-width: 0;
+  padding: 1.6em 1.9em 1.7em;
+  animation: slide-from-right 0.55s var(--ease-out) both;
+}
+
+.shell-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1.5em;
+  padding-bottom: 1em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.shell-heading {
+  display: grid;
+  gap: 0.3em;
+}
+
+.shell-title {
+  font-family: var(--font-display);
+  font-size: 1.7em;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  line-height: 1.15;
+  text-transform: uppercase;
+  color: var(--gold-1);
+  text-shadow: 0 0 1em rgba(227, 183, 85, 0.45);
+}
+
+.shell-head > .soon-tag {
+  margin-bottom: 0.5em;
+}
+
+.shell-lead {
+  max-width: 46em;
+  font-size: 1.02em;
+  line-height: 1.5;
+  color: #c9d2ea;
+}
+
+.shell-note {
+  display: flex;
+  align-items: center;
+  gap: 0.9em;
+  padding-top: 1em;
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+  font-size: 0.86em;
+  line-height: 1.4;
+  color: var(--text-dim);
+}
+
+.shell-note .soon-tag {
+  font-size: 0.74em;
+}
+
+/* Deck: pick a card, then the card in the other zone it swaps places with. */
+.builder-meta {
+  display: flex;
+  align-items: center;
+  gap: 1em;
+  padding-bottom: 0.2em;
+  white-space: nowrap;
+}
+
+.deck-count {
+  font-family: var(--font-display);
+  font-size: 1.15em;
+  font-weight: 700;
+  line-height: 1.1;
+  color: #f4f7ff;
+}
+
+/* Room is left above and to the left for the cost badges, and above for a card that lifts. */
+.deck {
+  display: flex;
+  flex: none;
+  gap: 1em;
+  padding: 0.8em 0 0.2em 0.7em;
+}
+
+.reserve {
+  display: grid;
+  gap: 0.2em;
+}
+
+.builder-hint {
+  min-height: 1.4em;
+  font-size: 0.92em;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+
+.builder:has(.is-picked) .builder-hint {
+  color: var(--gold-1);
+}
+
+.deck-card {
+  position: relative;
+  width: 7.3em;
+  height: 9.7em;
+  flex: none;
+  padding: 0;
+  border: 1.5px solid var(--frame);
+  border-radius: 0.75em;
+  background:
+    radial-gradient(120% 70% at 50% 30%, var(--tint), transparent 70%),
+    linear-gradient(180deg, #1d2950 0%, #0a0f22 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.07),
+    0 0.5em 1em rgba(0, 0, 0, 0.5);
+  outline: none;
+  cursor: pointer;
+  transition: transform 0.18s var(--ease-out), box-shadow 0.18s ease, border-color 0.18s ease, filter 0.18s ease;
+}
+
+.deck-card.dealt {
+  animation: card-in 0.5s var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 60ms + 150ms);
+}
+
+/* A Reserve card sits dimmed with a dashed frame until it is looked at or picked. */
+.reserve .deck-card {
+  border-style: dashed;
+  filter: saturate(0.6) brightness(0.8);
+}
+
+.deck-card:hover,
+.deck-card:focus-visible,
+.deck-card.is-picked {
+  z-index: 2;
+  transform: translateY(-0.35em) scale(1.06);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.12),
+    0 0.9em 1.5em rgba(0, 0, 0, 0.6),
+    0 0 1.5em var(--frame-glow);
+}
+
+.reserve .deck-card:hover,
+.reserve .deck-card:focus-visible,
+.reserve .deck-card.is-picked {
+  filter: none;
+}
+
+.deck-card:focus-visible {
+  outline: 2px solid var(--cyan-2);
+  outline-offset: 3px;
+}
+
+.deck-card.is-picked {
+  border-color: var(--gold-1);
+  box-shadow:
+    0 0 0 2px var(--gold-1),
+    0 0.9em 1.5em rgba(0, 0, 0, 0.6),
+    0 0 1.8em var(--frame-glow);
+}
+
+/* Cards the picked one can swap with breathe a gold ring. */
+.deck-card.is-target {
+  animation: target-pulse 1.1s ease-in-out infinite alternate;
+}
+
+.deck-card.just-swapped {
+  animation: swap-in 0.7s var(--ease-out) both;
+}
+
+/* The painted illustration fills the card; the name sits on a shade at its foot. */
+.card-art {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 0.62em;
+}
+
+.card-art img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.card-art::after {
+  content: '';
+  position: absolute;
+  inset: 45% 0 0;
+  background: linear-gradient(180deg, transparent, rgba(5, 8, 18, 0.82) 62%, rgba(5, 8, 18, 0.95));
+}
+
+.card-name {
+  position: absolute;
+  right: 0.3em;
+  bottom: 0.5em;
+  left: 0.3em;
+  display: grid;
+  place-items: center;
+  height: 2.3em;
+  font-size: 0.72em;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  line-height: 1.08;
+  text-align: center;
+  text-transform: uppercase;
+  color: #eef2ff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+}
+
+.card-cost {
+  position: absolute;
+  top: -0.6em;
+  left: -0.6em;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 1.9em;
+  height: 1.9em;
+  border: 1.5px solid #f9dcff;
+  border-radius: 0.15em 50% 50% 50%;
+  transform: rotate(45deg);
+  background: radial-gradient(circle at 35% 35%, var(--elixir-1), var(--elixir-2) 48%, var(--elixir-3));
+  box-shadow:
+    0 0 0.7em rgba(201, 75, 240, 0.75),
+    0 0.15em 0.3em rgba(0, 0, 0, 0.6);
+}
+
+.card-cost span {
+  transform: rotate(-45deg);
+  font-size: 1.08em;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(60, 0, 90, 0.95);
+}
+
+/* Codex: what is to be written there, a chapter to a tile. */
+.codex-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9em;
+}
+
+.codex-entry {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.15em 1.1em;
+  padding: 1.05em 1.2em;
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  border-radius: 0.85em;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.codex-entry svg {
+  grid-row: 1 / 3;
+  width: 2.5em;
+  height: 2.5em;
+  fill: none;
+  stroke: var(--gold-2);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 0.5em rgba(227, 183, 85, 0.45));
+}
+
+.codex-entry strong {
+  align-self: end;
+  font-family: var(--font-display);
+  font-size: 1.05em;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  color: #fff;
+}
+
+.codex-entry span {
+  align-self: start;
+  font-size: 0.86em;
+  line-height: 1.3;
+  color: var(--text-dim);
+}
+
+/* ---------------------------------------------------------------- Status bar */
+
+.statusbar {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 1.5em;
+  height: 3em;
+  padding: 0.1em 2.3em 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(4, 7, 16, 0.55), rgba(4, 7, 16, 0.9));
+  font-size: 0.76em;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--text-dim);
+}
+
+.conn {
+  display: flex;
+  align-items: center;
+  gap: 0.7em;
+  min-width: 0;
+}
+
+.conn-dot {
+  width: 0.7em;
+  height: 0.7em;
+  flex: none;
+  border-radius: 50%;
+  background: var(--gold-2);
+  box-shadow: 0 0 0.8em var(--gold-2);
+  animation: pulse-dot 1.4s ease-in-out infinite;
+}
+
+.conn[data-state='online'] .conn-dot {
+  background: #4dffa0;
+  box-shadow: 0 0 0.8em #4dffa0;
+}
+
+.conn[data-state='offline'] .conn-dot {
+  background: var(--crimson-2);
+  box-shadow: 0 0 0.8em var(--crimson-2);
+}
+
+.stats {
+  display: flex;
+  align-items: center;
+  gap: 0.9em;
+}
+
+.tally b {
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+}
+
+.tally-dot {
+  font-style: normal;
+  color: var(--gold-2);
+}
+
+.build {
+  text-align: right;
+  opacity: 0.8;
+}
+
+/* ---------------------------------------------------------------- Keyframes */
+
+@keyframes drop-in {
+  from { opacity: 0; translate: 0 -14px; }
+}
+
+@keyframes target-pulse {
+  from { box-shadow: 0 0 0 1px rgba(227, 183, 85, 0.2), 0 0.5em 1em rgba(0, 0, 0, 0.5); }
+  to { box-shadow: 0 0 0 3px rgba(227, 183, 85, 0.85), 0 0.5em 1em rgba(0, 0, 0, 0.5), 0 0 1.3em rgba(227, 183, 85, 0.45); }
+}
+
+@keyframes swap-in {
+  from { transform: translateY(-0.6em) scale(1.14); box-shadow: 0 0 0 2px var(--gold-1), 0 0 2em var(--frame-glow); }
+}
+
+@keyframes sheen {
+  0%, 55% { left: -60%; }
+  100% { left: 130%; }
+}
+
+@keyframes cta-breathe {
+  from { opacity: 0.35; scale: 0.94 0.8; }
+  to { opacity: 0.9; scale: 1.02 1.05; }
+}
+
+@keyframes locked-shake {
+  20% { translate: -0.3em 0; }
+  45% { translate: 0.26em 0; }
+  70% { translate: -0.16em 0; }
+  88% { translate: 0.08em 0; }
+}
+
+/* ---------------------------------------------------------------- Small windows */
+
+/* Under 900 x 506 the type has reached its smallest: the lobby keeps that size and the window scrolls over it. */
+@media (max-width: 899px), (max-height: 505px) {
+  .app {
+    min-width: 900px;
+    min-height: 506px;
+  }
+}

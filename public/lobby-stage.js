@@ -81,6 +81,13 @@ const REALMS = {
   },
 };
 
+/**
+ * How brightly the hall is lit. The champion's armour is to read as armour, steel
+ * and cloth and gold: only what glows of itself (a blade, a visor, the runes) is
+ * bright enough to bloom.
+ */
+const LIGHT = { sky: 0.5, key: 1.9, rim: 2.6, edge: 1.4, underglow: 2, weapon: 0.7, runes: 1.35, pool: 0.3 };
+
 /** How long a champion's flourish takes, and where in it the weapon is raised and the cut lands. */
 const FLOURISH = { seconds: 1.15, windup: 0.3, impact: 0.52 };
 /** Rune strokes as [x1, y1, x2, y2] segments inside a unit box. */
@@ -381,9 +388,9 @@ export async function createLobbyStage(canvas, { spot, dragSurface = null, hero:
 
   /* ---------------------------------------------------------------- Light */
 
-  const hemisphere = new THREE.HemisphereLight(REALMS.radiant.sky, REALMS.radiant.ground, 0.5);
+  const hemisphere = new THREE.HemisphereLight(REALMS.radiant.sky, REALMS.radiant.ground, LIGHT.sky);
   // The key light stands in front and above; it is the one that casts the champion's shadow on the stone.
-  const key = new THREE.DirectionalLight(REALMS.radiant.key, 2.1);
+  const key = new THREE.DirectionalLight(REALMS.radiant.key, LIGHT.key);
   key.position.set(-4.5, 8, 7.5);
   key.castShadow = true;
   key.shadow.mapSize.set(1024, 1024);
@@ -392,12 +399,12 @@ export async function createLobbyStage(canvas, { spot, dragSurface = null, hero:
   key.shadow.bias = -0.0006;
   key.shadow.normalBias = 0.03;
   // Two lights from behind draw the champion's edge in the colours of its realm.
-  const rim = new THREE.DirectionalLight(REALMS.radiant.rim, 4.2);
+  const rim = new THREE.DirectionalLight(REALMS.radiant.rim, LIGHT.rim);
   rim.position.set(5.5, 4.5, -8);
-  const edge = new THREE.DirectionalLight(REALMS.radiant.edge, 2.2);
+  const edge = new THREE.DirectionalLight(REALMS.radiant.edge, LIGHT.edge);
   edge.position.set(-7, 2.5, -5.5);
   // And the runes under its feet light it from below.
-  const underglow = new THREE.PointLight(REALMS.radiant.glow, 5, 9, 1.6);
+  const underglow = new THREE.PointLight(REALMS.radiant.glow, LIGHT.underglow, 9, 1.6);
   underglow.position.set(0, 0.35, 0.6);
   scene.add(hemisphere, key, key.target, rim, edge, underglow);
 
@@ -595,11 +602,11 @@ export async function createLobbyStage(canvas, { spot, dragSurface = null, hero:
     rim.color.copy(mixed.rim);
     edge.color.copy(mixed.edge);
     underglow.color.copy(mixed.glow);
-    underglow.intensity = 5 * lift * gutter;
+    underglow.intensity = LIGHT.underglow * lift * gutter;
     stone.userData.uniforms.uRim.value.copy(mixed.stone).multiplyScalar(0.5);
-    runeLight.color.copy(mixed.glow).multiplyScalar((1.7 + 0.25 * Math.sin(time * 1.3)) * lift * gutter);
+    runeLight.color.copy(mixed.glow).multiplyScalar((LIGHT.runes + 0.2 * Math.sin(time * 1.3)) * lift * gutter);
     pool.material.color.copy(mixed.glow);
-    pool.material.opacity = Math.min(1, 0.42 * lift * gutter);
+    pool.material.opacity = Math.min(1, LIGHT.pool * lift * gutter);
     sparks.uniforms.uOpacity.value = 1 - realm;
     embers.uniforms.uOpacity.value = realm;
     if (bloom) bloom.strength = 0.5 + flare * 0.5;
@@ -656,7 +663,7 @@ export async function createLobbyStage(canvas, { spot, dragSurface = null, hero:
     hero.body.scale.setScalar(hero.size * (0.93 + 0.07 * stand));
     hero.ring.rotation.y = time * 0.9;
     hero.pose(pose, time, ambient);
-    light.intensity = (1.6 + 0.5 * Math.sin(time * 2.3) + Math.abs(pose.strike) * 3) * stand;
+    light.intensity = (LIGHT.weapon + 0.2 * Math.sin(time * 2.3) + Math.abs(pose.strike) * 1.8) * stand;
     // Whoever stepped down sheds the last of its light.
     for (const other of champions.values()) if (other !== current) other.hero.rest(dt);
 
