@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#05070f">
+  <meta name="description" content="RuneDeck — a real-time tactical lane battler. Command your Hero, deploy your deck, shatter the Ancient Throne.">
+  <title>RuneDeck — Tactical Lane Battler</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cpath d='M24 2.5 42.5 8.5V23c0 11-7.4 18.6-18.5 22.5C12.9 41.6 5.5 34 5.5 23V8.5Z' fill='%230a0f1f' stroke='%23e3b755' stroke-width='3' stroke-linejoin='round'/%3E%3Cpath d='M24 7.2 10 11.8V23c0 8.6 5.6 14.6 14 17.9Z' fill='%2338c6f4'/%3E%3Cpath d='M24 7.2 38 11.8V23c0 8.6-5.6 14.6-14 17.9Z' fill='%23f0413a'/%3E%3Cpath d='M24 5v38' stroke='%23eaffff' stroke-width='2'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;900&family=Rajdhani:wght@500;600;700&display=swap">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="lobby.css">
+  <link rel="stylesheet" href="hud.css">
+  <script type="importmap">{ "imports": { "three": "/vendor/three/three.module.js", "three/addons/": "/vendor/three/addons/" } }</script>
+</head>
+<body data-phase="lobby" data-tab="play" data-realm="radiant">
+  <!-- The lobby's stage: the hall the chosen champion stands in (lobby-stage.js), over a sky that holds the page until it is drawn. -->
+  <div class="stage-sky" aria-hidden="true"></div>
+  <canvas id="stage" aria-hidden="true"></canvas>
+
+  <!-- ===================================================== Lobby -->
+  <div class="app" id="app">
+    <header class="nav">
+      <div class="brand">
+        <svg class="brand-mark" viewBox="0 0 48 48" aria-hidden="true">
+          <defs>
+            <linearGradient id="bm-gold" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#fff1b8"/><stop offset=".5" stop-color="#d4a441"/><stop offset="1" stop-color="#7a5415"/>
+            </linearGradient>
+            <linearGradient id="bm-radiant" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#c9f7ff"/><stop offset="1" stop-color="#1c6fc4"/>
+            </linearGradient>
+            <linearGradient id="bm-dire" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#ffb07a"/><stop offset="1" stop-color="#b3161c"/>
+            </linearGradient>
+          </defs>
+          <path d="M24 2.5 42.5 8.5V23c0 11-7.4 18.6-18.5 22.5C12.9 41.6 5.5 34 5.5 23V8.5Z" fill="#0a0f1f" stroke="url(#bm-gold)" stroke-width="2.6" stroke-linejoin="round"/>
+          <path d="M24 7.2 10 11.8V23c0 8.6 5.6 14.6 14 17.9Z" fill="url(#bm-radiant)"/>
+          <path d="M24 7.2 38 11.8V23c0 8.6-5.6 14.6-14 17.9Z" fill="url(#bm-dire)"/>
+          <path d="M24 5v38" stroke="#eaffff" stroke-width="1.6"/>
+          <path d="M24 16.5 29 23.5 24 30.5 19 23.5Z" fill="#0a0f1f" stroke="url(#bm-gold)" stroke-width="1.6" stroke-linejoin="round"/>
+        </svg>
+        <div class="brand-text">
+          <h1 class="brand-name">RuneDeck</h1>
+          <span class="brand-sub">Lane Battler</span>
+        </div>
+      </div>
+
+      <div class="tabs" id="tabs" role="tablist" aria-label="Lobby">
+        <button class="tab" id="tab-play" type="button" role="tab" data-tab="play" aria-controls="screen-play" aria-selected="true">Play</button>
+        <button class="tab" id="tab-heroes" type="button" role="tab" data-tab="heroes" aria-controls="screen-heroes" aria-selected="false" tabindex="-1">Heroes</button>
+        <button class="tab" id="tab-deck" type="button" role="tab" data-tab="deck" aria-controls="screen-deck" aria-selected="false" tabindex="-1">Deck</button>
+        <button class="tab" id="tab-codex" type="button" role="tab" data-tab="codex" aria-controls="screen-codex" aria-selected="false" tabindex="-1">Codex</button>
+      </div>
+
+      <div class="nav-tools">
+        <label class="nick" title="Your nickname. Click to change it.">
+          <svg class="nick-mark" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 2 20 12 12 22 4 12Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+            <path d="M12 7v10M8.5 12h7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+          <span class="sr-only">Player nickname</span>
+          <input id="nickname" name="nickname" type="text" maxlength="16" autocomplete="nickname"
+                 spellcheck="false" enterkeyhint="done" placeholder="Enter your name">
+          <svg class="nick-edit" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="m4 20 1-4.6L16.4 4a2 2 0 0 1 2.9 0l.7.7a2 2 0 0 1 0 2.9L8.6 19Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+          </svg>
+        </label>
+        <div id="lobby-mixer" role="group" aria-label="Audio"></div>
+      </div>
+    </header>
+
+    <main class="screens">
+      <!-- ................................................. PLAY -->
+      <section class="screen screen-play" id="screen-play" role="tabpanel" aria-labelledby="tab-play">
+        <div class="hero-spot" aria-hidden="true"></div>
+
+        <div class="nameplate">
+          <span class="realm-tag" id="plate-realm">Radiant</span>
+          <p class="nameplate-name" id="plate-name">Aether Knight</p>
+          <p class="nameplate-title" id="plate-title">Rift-forged Vanguard</p>
+        </div>
+
+        <aside class="play-side" aria-label="Ready check">
+          <section class="loadout glass" aria-labelledby="loadout-title">
+            <h2 class="panel-title" id="loadout-title">Battle Loadout</h2>
+
+            <div class="loadout-part">
+              <div class="loadout-head">
+                <span class="field-label">Active Champion</span>
+                <button class="btn btn-link" id="btn-change-hero" type="button">Change Hero <span aria-hidden="true">→</span></button>
+              </div>
+              <div class="loadout-hero">
+                <span class="loadout-portrait" id="loadout-portrait"></span>
+                <div class="loadout-who">
+                  <strong class="loadout-name" id="loadout-name">Aether Knight</strong>
+                  <span class="loadout-role" id="loadout-role">Melee Vanguard</span>
+                </div>
+                <span class="realm-tag" id="loadout-realm">Radiant</span>
+              </div>
+            </div>
+
+            <div class="loadout-part">
+              <div class="loadout-head">
+                <span class="field-label">Battle Deck</span>
+                <span class="avg-badge" title="Average Elixir cost of the Battle Deck"><i class="elixir-drop" aria-hidden="true"></i><b id="loadout-avg">–</b> Avg Elixir</span>
+                <button class="btn btn-link" id="btn-edit-deck" type="button">Edit Deck <span aria-hidden="true">→</span></button>
+              </div>
+              <ul class="mini-deck" id="loadout-deck" aria-label="Battle Deck"></ul>
+            </div>
+
+            <p class="mode-pill">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4l11 11M20 4 9 15M13.5 17.5l4-4M6.5 13.5l4 4M17 17l3 3M7 17l-3 3"/></svg>
+              <span>1v1 Tactical Lane Battle</span><i aria-hidden="true">•</i><span>AI Bot fallback at <b id="mode-limit">01:00</b></span>
+            </p>
+          </section>
+
+          <div class="cta">
+            <button class="btn btn-find" id="btn-find" type="button" disabled>
+              <span class="btn-face">Find Match</span>
+            </button>
+          </div>
+        </aside>
+      </section>
+
+      <!-- ................................................. HEROES -->
+      <section class="screen screen-heroes" id="screen-heroes" role="tabpanel" aria-labelledby="tab-heroes" hidden>
+        <aside class="roster glass" aria-labelledby="roster-title">
+          <div class="panel-head">
+            <h2 class="panel-title" id="roster-title">Champions</h2>
+            <span class="panel-count" id="roster-count"></span>
+          </div>
+          <ul class="roster-list" id="roster" role="radiogroup" aria-labelledby="roster-title"></ul>
+        </aside>
+
+        <div class="inspect">
+          <div class="hero-turn" id="hero-turn" tabindex="0" role="group" aria-label="The champion on its pedestal. Drag, or press the left and right arrow keys, to turn it.">
+            <div class="hero-spot" aria-hidden="true"></div>
+          </div>
+          <p class="turn-hint">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.2 8.7C4.9 9.4 3.5 10.6 3.5 12c0 2.2 3.8 4 8.5 4s8.5-1.8 8.5-4-3.8-4-8.5-4"/><path d="M14.6 5.4 12 8l2.6 2.6"/></svg>
+            Drag Hero to Rotate 360°
+          </p>
+        </div>
+
+        <aside class="sheet glass" id="sheet" aria-labelledby="sheet-name">
+          <div class="sheet-tags">
+            <span class="realm-tag" id="sheet-realm"></span>
+            <span class="role-tag" id="sheet-role"></span>
+          </div>
+          <h2 class="sheet-name" id="sheet-name"></h2>
+          <p class="sheet-lore" id="sheet-lore"></p>
+
+          <dl class="meters" id="sheet-meters">
+            <div class="meter" data-stat="health" style="--i: 0"><dt>Health</dt><dd><span class="meter-track"><i class="meter-fill"></i></span><b class="meter-value">0</b></dd></div>
+            <div class="meter" data-stat="mana" style="--i: 1"><dt>Mana</dt><dd><span class="meter-track"><i class="meter-fill"></i></span><b class="meter-value">0</b></dd></div>
+            <div class="meter" data-stat="attack" style="--i: 2"><dt>Attack</dt><dd><span class="meter-track"><i class="meter-fill"></i></span><b class="meter-value">0</b></dd></div>
+            <div class="meter" data-stat="mobility" style="--i: 3"><dt>Mobility</dt><dd><span class="meter-track"><i class="meter-fill"></i></span><b class="meter-value">0</b></dd></div>
+          </dl>
+
+          <span class="field-label" id="kit-title">Abilities</span>
+          <ul class="kit" id="sheet-kit" aria-labelledby="kit-title"></ul>
+
+          <button class="btn btn-equip" id="btn-equip" type="button">
+            <span class="btn-face"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg><span id="equip-label">Equip Champion</span></span>
+          </button>
+        </aside>
+      </section>
+
+      <!-- ................................................. DECK -->
+      <section class="screen screen-deck" id="screen-deck" role="tabpanel" aria-labelledby="tab-deck" hidden>
+        <div class="hero-spot" aria-hidden="true"></div>
+
+        <section class="shell glass builder" aria-labelledby="builder-title">
+          <div class="shell-head">
+            <div class="shell-heading">
+              <span class="field-label">Deck</span>
+              <h2 class="shell-title" id="builder-title">Battle Deck</h2>
+            </div>
+            <div class="builder-meta">
+              <span class="deck-count" id="deck-count">6 Cards</span>
+              <span class="avg-badge"><i class="elixir-drop" aria-hidden="true"></i><b id="deck-avg">–</b> Avg Elixir</span>
+            </div>
+          </div>
+
+          <ul class="deck" id="deck" aria-label="Battle Deck"></ul>
+          <div class="reserve">
+            <span class="field-label" id="reserve-title">Reserve</span>
+            <ul class="deck" id="reserve" aria-labelledby="reserve-title"></ul>
+          </div>
+          <p class="builder-hint" id="builder-hint" role="status"></p>
+
+          <p class="shell-note"><span class="soon-tag">Coming Soon</span>The full Deck Forge is on its way. Until it opens, swap cards here: your Battle Deck is saved as you go.</p>
+        </section>
+      </section>
+
+      <!-- ................................................. CODEX -->
+      <section class="screen screen-codex" id="screen-codex" role="tabpanel" aria-labelledby="tab-codex" hidden>
+        <div class="hero-spot" aria-hidden="true"></div>
+
+        <section class="shell glass codex" aria-labelledby="codex-title">
+          <div class="shell-head">
+            <div class="shell-heading">
+              <span class="field-label">Codex</span>
+              <h2 class="shell-title" id="codex-title">Chronicle of the Realm</h2>
+            </div>
+            <span class="soon-tag">Coming Soon</span>
+          </div>
+
+          <p class="shell-lead">The scribes are still at work. When the Codex opens, everything worth knowing before a battle will be written here.</p>
+          <ul class="codex-list">
+            <li class="codex-entry">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20v-8a7 7 0 0 1 14 0v8M9 20v-6h6v6M12 5V2.5"/></svg>
+              <strong>Champions</strong><span>The story and the kit of every hero</span>
+            </li>
+            <li class="codex-entry">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6.5h9.5a1.5 1.5 0 0 1 1.5 1.5v11.5a1.5 1.5 0 0 1-1.5 1.5H8a1.5 1.5 0 0 1-1.5-1.5V8A1.5 1.5 0 0 1 8 6.5ZM9.5 3.5h-3A1.5 1.5 0 0 0 5 5v11"/></svg>
+              <strong>Cards</strong><span>Every troop, spell and building</span>
+            </li>
+            <li class="codex-entry">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 19.5 12 12 21.5 4.5 12ZM12 8v8M9 12h6"/></svg>
+              <strong>Runes &amp; Relics</strong><span>What the River and the forge grant</span>
+            </li>
+            <li class="codex-entry">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 21V9l-1.5-1V4H7v1.5h3V4h4v1.5h3V4h2.5v4L18 9v12ZM10 21v-5a2 2 0 0 1 4 0v5"/></svg>
+              <strong>Battlefield</strong><span>The lanes, the Towers and the Ancient Throne</span>
+            </li>
+          </ul>
+        </section>
+      </section>
+    </main>
+
+    <footer class="statusbar">
+      <span class="conn" id="conn" data-state="connecting"><i class="conn-dot" aria-hidden="true"></i><span id="conn-text">Connecting to server…</span></span>
+      <span class="stats" id="lobby-stats" aria-live="polite"></span>
+      <span class="build">RuneDeck v0.1.0</span>
+    </footer>
+  </div>
+
+  <!-- ===================================================== Matchmaking queue -->
+  <div class="overlay" id="queue-modal" role="dialog" aria-modal="true" aria-labelledby="queue-title" hidden>
+    <div class="modal glass queue-panel" id="queue-panel">
+      <h2 class="modal-title" id="queue-title">Searching for Opponent</h2>
+
+      <div class="queue-ring">
+        <svg viewBox="0 0 200 200" aria-hidden="true">
+          <circle class="ring-runes" cx="100" cy="100" r="97"/>
+          <circle class="ring-track" cx="100" cy="100" r="88"/>
+          <circle class="ring-progress" id="queue-progress" cx="100" cy="100" r="88"/>
+          <circle class="ring-inner" cx="100" cy="100" r="76"/>
+        </svg>
+        <div class="queue-readout">
+          <span class="queue-timer" id="queue-timer" role="timer">00:00</span>
+          <span class="queue-limit" id="queue-limit">/ 01:00</span>
+        </div>
+      </div>
+
+      <p class="queue-status" id="queue-status" aria-live="polite">Entering the matchmaking queue…</p>
+      <p class="queue-hint" id="queue-hint">If no challenger answers by <strong>01:00</strong>, an AI opponent takes the field.</p>
+
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="btn-cancel" type="button">Cancel Search</button>
+        <button class="btn btn-dev" id="btn-spawn-bot" type="button">[DEV] Spawn Bot Immediately</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================== Match found -->
+  <div class="overlay overlay-match" id="match-overlay" role="dialog" aria-modal="true" aria-labelledby="match-title" hidden>
+    <div class="versus">
+      <h2 class="versus-title" id="match-title">Match Found</h2>
+      <p class="versus-sub" id="match-mode">1v1 · PvP</p>
+
+      <div class="versus-row">
+        <section class="side-card radiant" id="side-radiant">
+          <span class="side-label">Radiant · Left</span>
+          <span class="side-sigil" id="sigil-radiant"></span>
+          <strong class="side-name" id="name-radiant"></strong>
+          <span class="side-tag" id="tag-radiant"></span>
+          <span class="side-hero" id="hero-radiant">Aether Knight</span>
+        </section>
+        <div class="versus-vs" aria-hidden="true">VS</div>
+        <section class="side-card dire" id="side-dire">
+          <span class="side-label">Dire · Right</span>
+          <span class="side-sigil" id="sigil-dire"></span>
+          <strong class="side-name" id="name-dire"></strong>
+          <span class="side-tag" id="tag-dire"></span>
+          <span class="side-hero" id="hero-dire">Morgath</span>
+        </section>
+      </div>
+
+      <p class="match-status" aria-live="polite"><span id="match-status-label">Battle begins in</span> <b id="match-count">5</b></p>
+      <div class="match-load" id="match-load">
+        <div class="load-head">
+          <span class="load-label" id="load-label">Preparing the battlefield</span>
+          <span class="load-percent" id="load-percent" aria-hidden="true">0%</span>
+        </div>
+        <div class="load-track" id="load-track" role="progressbar" aria-labelledby="load-label" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <i class="load-fill" id="load-fill"></i>
+        </div>
+      </div>
+      <p class="match-note" id="match-note"></p>
+      <button class="btn btn-ghost" id="btn-leave" type="button">Return to Lobby</button>
+    </div>
+  </div>
+
+  <!-- ===================================================== In-game: battlefield and HUD -->
+  <div class="game" id="game" hidden>
+    <canvas class="battlefield" id="battlefield"></canvas>
+    <div class="vignette" aria-hidden="true"></div>
+    <div class="world-layer" id="world-layer" aria-hidden="true"></div>
+
+    <div class="cinema" id="cinema" data-phase="off" aria-hidden="true">
+      <i class="cinema-bar top"></i>
+      <i class="cinema-bar bottom"></i>
+      <p class="cinema-banner cinema-overview"><span>Battlefield Overview</span><b>—</b><span>Prepare for War</span></p>
+      <p class="cinema-fight">Fight!</p>
+      <p class="cinema-banner cinema-finale" id="cinema-finale"><span></span><b>—</b><span></span></p>
+    </div>
+
+    <div class="announce" id="announce" data-tone="kill" role="status" aria-live="assertive">
+      <div class="banner">
+        <i class="banner-flare" aria-hidden="true"></i>
+        <p class="banner-title" id="announce-text"></p>
+        <p class="banner-sub" id="announce-sub"></p>
+      </div>
+    </div>
+
+    <div class="hud" id="hud">
+      <header class="hud-top glass" id="hud-top">
+        <div class="team radiant" id="team-radiant">
+          <span class="team-crest"></span>
+          <div class="team-body">
+            <div class="team-head"><span class="team-name">Radiant</span><span class="team-player"></span></div>
+            <div class="team-bar" title="Radiant total structure health"><i class="bar-ghost"></i><i class="bar-fill"></i><b class="bar-text"></b></div>
+          </div>
+        </div>
+        <div class="clock">
+          <span class="clock-mode" id="hud-clock-mode" hidden>Sudden Death</span>
+          <span class="clock-time" id="hud-timer" role="timer" aria-label="Match time remaining">03:30</span>
+          <span class="clock-rune" id="hud-rune" title="Time until the next River Rune spawns"><i class="rune-gem"></i><span id="hud-rune-text">Rune 0:30</span></span>
+        </div>
+        <div class="team dire" id="team-dire">
+          <span class="team-crest"></span>
+          <div class="team-body">
+            <div class="team-head"><span class="team-name">Dire</span><span class="team-player"></span></div>
+            <div class="team-bar" title="Dire total structure health"><i class="bar-ghost"></i><i class="bar-fill"></i><b class="bar-text"></b></div>
+          </div>
+        </div>
+      </header>
+
+      <div class="hud-corner">
+        <div id="hud-mixer"></div>
+        <button class="hud-leave" id="btn-leave-match" type="button">Leave Match</button>
+      </div>
+
+      <ol class="feed" id="feed" aria-live="polite" aria-label="Combat feed"></ol>
+
+      <section class="hero-panel glass" id="hero-panel" aria-label="Hero">
+        <div class="hero-id">
+          <div class="portrait"><img id="hud-portrait" alt=""><span class="respawn" id="hud-respawn" title="Seconds until your hero respawns"></span><span class="level" id="hud-level" title="Hero level">1</span></div>
+          <div class="gold" title="Gold"><i class="coin"></i><span id="hud-gold">0</span></div>
+        </div>
+        <div class="hero-main">
+          <div class="hero-title"><strong id="hud-hero-name"></strong><span class="buffs" id="hud-buffs" aria-live="polite"></span><span id="hud-player-name"></span></div>
+          <div class="stat hp" id="stat-hp" title="Health"><i class="stat-ghost"></i><i class="stat-fill"></i><b></b></div>
+          <div class="stat mana" id="stat-mana" title="Mana"><i class="stat-fill"></i><b></b></div>
+          <div class="skills">
+            <div class="abilities" id="abilities" aria-label="Abilities"></div>
+            <div class="items" id="items" aria-label="Items"></div>
+          </div>
+        </div>
+      </section>
+
+      <p class="hint" id="hint" role="status"></p>
+
+      <aside class="hud-right">
+        <div class="minimap glass">
+          <canvas id="minimap" aria-label="Tactical minimap. Click or drag to move the camera."></canvas>
+          <button class="camera-lock on" id="btn-camera-lock" type="button" aria-pressed="true"><i></i>Lock<kbd>Space</kbd></button>
+        </div>
+        <section class="dock glass" id="dock" aria-label="Card dock">
+          <div class="dock-cards">
+            <div class="hand" id="hand"></div>
+            <div class="next"><span class="next-label">Next</span><div id="next-card"></div></div>
+          </div>
+          <div class="elixir" id="elixir" title="Elixir">
+            <span class="elixir-badge"><b id="elixir-count">0</b></span>
+            <div class="elixir-track" id="elixir-track"></div>
+            <span class="elixir-boost" id="elixir-boost" title="Double Elixir: Elixir flows twice as fast" hidden>2X</span>
+          </div>
+        </section>
+      </aside>
+
+      <div class="card-ghost" id="card-ghost" hidden></div>
+
+      <div class="result" id="result" role="dialog" aria-modal="true" aria-labelledby="result-title" aria-describedby="result-detail" hidden>
+        <div class="result-card summary glass">
+          <h2 class="result-title" id="result-title"></h2>
+          <p class="result-detail" id="result-detail"></p>
+          <dl class="summary-meta">
+            <div><dt>Match Duration</dt><dd id="summary-duration"></dd></div>
+            <div><dt>Winner</dt><dd id="summary-winner"></dd></div>
+          </dl>
+          <div class="summary-stats" id="summary-stats"></div>
+          <div class="summary-actions">
+            <button class="btn btn-gold" id="btn-play-again" type="button">Play Again</button>
+            <button class="btn btn-ghost" id="btn-result" type="button">Return to Lobby</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toasts" id="toasts"></div>
+  <div class="tooltip glass" id="tooltip" role="tooltip"></div>
+
+  <noscript><p class="noscript">RuneDeck needs JavaScript enabled to run.</p></noscript>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script type="module" src="client.js"></script>
+</body>
+</html>

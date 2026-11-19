@@ -1,0 +1,724 @@
+{
+  "version": 1,
+  "licence": "CC0-1.0",
+  "sounds": {
+    "tick": [
+      {
+        "file": "tick-1.ogg",
+        "bytes": 4497,
+        "seconds": 0.023,
+        "pack": "kenney-interface",
+        "source": "Audio/tick_001.ogg"
+      },
+      {
+        "file": "tick-2.ogg",
+        "bytes": 4514,
+        "seconds": 0.023,
+        "pack": "kenney-interface",
+        "source": "Audio/tick_002.ogg"
+      },
+      {
+        "file": "tick-3.ogg",
+        "bytes": 5031,
+        "seconds": 0.055,
+        "pack": "kenney-interface",
+        "source": "Audio/tick_004.ogg"
+      }
+    ],
+    "drop": [
+      {
+        "file": "drop-1.ogg",
+        "bytes": 5859,
+        "seconds": 0.11,
+        "pack": "kenney-interface",
+        "source": "Audio/drop_001.ogg"
+      },
+      {
+        "file": "drop-2.ogg",
+        "bytes": 6411,
+        "seconds": 0.191,
+        "pack": "kenney-interface",
+        "source": "Audio/drop_002.ogg"
+      },
+      {
+        "file": "drop-3.ogg",
+        "bytes": 6288,
+        "seconds": 0.191,
+        "pack": "kenney-interface",
+        "source": "Audio/drop_003.ogg"
+      }
+    ],
+    "cardSlide": [
+      {
+        "file": "cardSlide-1.ogg",
+        "bytes": 8833,
+        "seconds": 0.601,
+        "pack": "kenney-casino",
+        "source": "Audio/card-slide-1.ogg"
+      },
+      {
+        "file": "cardSlide-2.ogg",
+        "bytes": 9042,
+        "seconds": 0.584,
+        "pack": "kenney-casino",
+        "source": "Audio/card-slide-2.ogg"
+      },
+      {
+        "file": "cardSlide-3.ogg",
+        "bytes": 9164,
+        "seconds": 0.598,
+        "pack": "kenney-casino",
+        "source": "Audio/card-slide-3.ogg"
+      },
+      {
+        "file": "cardSlide-4.ogg",
+        "bytes": 7912,
+        "seconds": 0.459,
+        "pack": "kenney-casino",
+        "source": "Audio/card-slide-4.ogg"
+      }
+    ],
+    "cardPlace": [
+      {
+        "file": "cardPlace-1.ogg",
+        "bytes": 9624,
+        "seconds": 0.689,
+        "pack": "kenney-casino",
+        "source": "Audio/card-place-1.ogg"
+      },
+      {
+        "file": "cardPlace-2.ogg",
+        "bytes": 8046,
+        "seconds": 0.459,
+        "pack": "kenney-casino",
+        "source": "Audio/card-place-2.ogg"
+      },
+      {
+        "file": "cardPlace-3.ogg",
+        "bytes": 9618,
+        "seconds": 0.601,
+        "pack": "kenney-casino",
+        "source": "Audio/card-place-4.ogg"
+      }
+    ],
+    "cardShove": [
+      {
+        "file": "cardShove-1.ogg",
+        "bytes": 10690,
+        "seconds": 0.766,
+        "pack": "kenney-casino",
+        "source": "Audio/card-shove-1.ogg"
+      },
+      {
+        "file": "cardShove-2.ogg",
+        "bytes": 9948,
+        "seconds": 0.693,
+        "pack": "kenney-casino",
+        "source": "Audio/card-shove-3.ogg"
+      }
+    ],
+    "latch": [
+      {
+        "file": "latch-1.ogg",
+        "bytes": 10208,
+        "seconds": 0.261,
+        "pack": "kenney-rpg",
+        "source": "OGG/metalLatch.ogg"
+      },
+      {
+        "file": "latch-2.ogg",
+        "bytes": 13615,
+        "seconds": 0.446,
+        "pack": "kenney-rpg",
+        "source": "OGG/metalClick.ogg"
+      }
+    ],
+    "purse": [
+      {
+        "file": "purse-1.ogg",
+        "bytes": 25394,
+        "seconds": 0.846,
+        "pack": "kenney-rpg",
+        "source": "OGG/handleCoins.ogg"
+      },
+      {
+        "file": "purse-2.ogg",
+        "bytes": 13094,
+        "seconds": 0.338,
+        "pack": "kenney-rpg",
+        "source": "OGG/handleCoins2.ogg"
+      }
+    ],
+    "knife": [
+      {
+        "file": "knife-1.ogg",
+        "bytes": 11134,
+        "seconds": 0.4,
+        "pack": "kenney-rpg",
+        "source": "OGG/drawKnife1.ogg"
+      },
+      {
+        "file": "knife-2.ogg",
+        "bytes": 12395,
+        "seconds": 0.446,
+        "pack": "kenney-rpg",
+        "source": "OGG/drawKnife2.ogg"
+      },
+      {
+        "file": "knife-3.ogg",
+        "bytes": 12726,
+        "seconds": 0.477,
+        "pack": "kenney-rpg",
+        "source": "OGG/drawKnife3.ogg"
+      }
+    ],
+    "footstep": [
+      {
+        "file": "footstep-1.ogg",
+        "bytes": 9475,
+        "seconds": 0.249,
+        "pack": "kenney-rpg",
+        "source": "OGG/footstep00.ogg"
+      },
+      {
+        "file": "footstep-2.ogg",
+        "bytes": 9900,
+        "seconds": 0.282,
+        "pack": "kenney-rpg",
+        "source": "OGG/footstep01.ogg"
+      },
+      {
+        "file": "footstep-3.ogg",
+        "bytes": 9528,
+        "seconds": 0.242,
+        "pack": "kenney-rpg",
+        "source": "OGG/footstep02.ogg"
+      },
+      {
+        "file": "footstep-4.ogg",
+        "bytes": 10559,
+        "seconds": 0.269,
+        "pack": "kenney-rpg",
+        "source": "OGG/footstep03.ogg"
+      }
+    ],
+    "belt": [
+      {
+        "file": "belt-1.ogg",
+        "bytes": 10820,
+        "seconds": 0.277,
+        "pack": "kenney-rpg",
+        "source": "OGG/beltHandle1.ogg"
+      },
+      {
+        "file": "belt-2.ogg",
+        "bytes": 15410,
+        "seconds": 0.477,
+        "pack": "kenney-rpg",
+        "source": "OGG/beltHandle2.ogg"
+      }
+    ],
+    "bodyfall": [
+      {
+        "file": "bodyfall-1.ogg",
+        "bytes": 11695,
+        "seconds": 0.415,
+        "pack": "kenney-rpg",
+        "source": "OGG/dropLeather.ogg"
+      }
+    ],
+    "coins": [
+      {
+        "file": "coins-1.ogg",
+        "bytes": 18985,
+        "seconds": 0.406,
+        "pack": "rpg80",
+        "source": "item_coins_01.ogg"
+      },
+      {
+        "file": "coins-2.ogg",
+        "bytes": 31942,
+        "seconds": 0.616,
+        "pack": "rpg80",
+        "source": "item_coins_02.ogg"
+      },
+      {
+        "file": "coins-3.ogg",
+        "bytes": 24878,
+        "seconds": 0.482,
+        "pack": "rpg80",
+        "source": "item_coins_03.ogg"
+      }
+    ],
+    "gem": [
+      {
+        "file": "gem-1.ogg",
+        "bytes": 14690,
+        "seconds": 0.247,
+        "pack": "rpg80",
+        "source": "item_gem_01.ogg"
+      },
+      {
+        "file": "gem-2.ogg",
+        "bytes": 11885,
+        "seconds": 0.288,
+        "pack": "rpg80",
+        "source": "item_gem_03.ogg"
+      },
+      {
+        "file": "gem-3.ogg",
+        "bytes": 28423,
+        "seconds": 0.592,
+        "pack": "rpg80",
+        "source": "item_gem_04.ogg"
+      }
+    ],
+    "blade": [
+      {
+        "file": "blade-1.ogg",
+        "bytes": 15142,
+        "seconds": 0.291,
+        "pack": "rpg80",
+        "source": "blade_01.ogg"
+      },
+      {
+        "file": "blade-2.ogg",
+        "bytes": 17776,
+        "seconds": 0.313,
+        "pack": "rpg80",
+        "source": "blade_02.ogg"
+      },
+      {
+        "file": "blade-3.ogg",
+        "bytes": 15184,
+        "seconds": 0.396,
+        "pack": "rpg80",
+        "source": "blade_03.ogg"
+      }
+    ],
+    "stone": [
+      {
+        "file": "stone-1.ogg",
+        "bytes": 15303,
+        "seconds": 0.298,
+        "pack": "rpg80",
+        "source": "item_stone_02.ogg"
+      },
+      {
+        "file": "stone-2.ogg",
+        "bytes": 17029,
+        "seconds": 0.298,
+        "pack": "rpg80",
+        "source": "item_stone_04.ogg"
+      },
+      {
+        "file": "stone-3.ogg",
+        "bytes": 20176,
+        "seconds": 0.383,
+        "pack": "rpg80",
+        "source": "stones_04.ogg"
+      }
+    ],
+    "fire": [
+      {
+        "file": "fire-1.ogg",
+        "bytes": 53074,
+        "seconds": 1.005,
+        "pack": "rpg80",
+        "source": "spell_fire_06.ogg"
+      },
+      {
+        "file": "fire-2.ogg",
+        "bytes": 24862,
+        "seconds": 0.651,
+        "pack": "rpg80",
+        "source": "spell_fire_07.ogg"
+      }
+    ],
+    "pop": [
+      {
+        "file": "pop-1.ogg",
+        "bytes": 14327,
+        "seconds": 0.3,
+        "pack": "sfx100",
+        "source": "plop_01.ogg"
+      },
+      {
+        "file": "pop-2.ogg",
+        "bytes": 17177,
+        "seconds": 0.359,
+        "pack": "sfx100",
+        "source": "plop_02.ogg"
+      }
+    ],
+    "impact": [
+      {
+        "file": "impact-1.ogg",
+        "bytes": 14762,
+        "seconds": 0.265,
+        "pack": "sfx100",
+        "source": "hit_01.ogg"
+      },
+      {
+        "file": "impact-2.ogg",
+        "bytes": 17176,
+        "seconds": 0.327,
+        "pack": "sfx100",
+        "source": "hit_02.ogg"
+      },
+      {
+        "file": "impact-3.ogg",
+        "bytes": 20643,
+        "seconds": 0.426,
+        "pack": "sfx100",
+        "source": "hit_03.ogg"
+      }
+    ],
+    "slam": [
+      {
+        "file": "slam-1.ogg",
+        "bytes": 24469,
+        "seconds": 0.474,
+        "pack": "sfx100",
+        "source": "slam_01.ogg"
+      },
+      {
+        "file": "slam-2.ogg",
+        "bytes": 28190,
+        "seconds": 0.637,
+        "pack": "sfx100",
+        "source": "slam_02.ogg"
+      },
+      {
+        "file": "slam-3.ogg",
+        "bytes": 23331,
+        "seconds": 0.447,
+        "pack": "sfx100",
+        "source": "slam_06.ogg"
+      }
+    ],
+    "glass": [
+      {
+        "file": "glass-1.ogg",
+        "bytes": 18701,
+        "seconds": 0.39,
+        "pack": "sfx100",
+        "source": "glass_01.ogg"
+      },
+      {
+        "file": "glass-2.ogg",
+        "bytes": 17502,
+        "seconds": 0.366,
+        "pack": "sfx100",
+        "source": "glass_02.ogg"
+      },
+      {
+        "file": "glass-3.ogg",
+        "bytes": 20324,
+        "seconds": 0.414,
+        "pack": "sfx100",
+        "source": "glass_03.ogg"
+      }
+    ],
+    "bell": [
+      {
+        "file": "bell-1.ogg",
+        "bytes": 38999,
+        "seconds": 1.3,
+        "pack": "sfx100",
+        "source": "bell_01.ogg"
+      }
+    ],
+    "gong": [
+      {
+        "file": "gong-1.ogg",
+        "bytes": 55320,
+        "seconds": 1.424,
+        "pack": "sfx100",
+        "source": "gong_01.ogg"
+      }
+    ],
+    "metal": [
+      {
+        "file": "metal-1.ogg",
+        "bytes": 11820,
+        "seconds": 0.238,
+        "pack": "breaking",
+        "source": "bfh1_metal_hit_01.ogg"
+      },
+      {
+        "file": "metal-2.ogg",
+        "bytes": 16778,
+        "seconds": 0.46,
+        "pack": "breaking",
+        "source": "bfh1_metal_hit_03.ogg"
+      },
+      {
+        "file": "metal-3.ogg",
+        "bytes": 13131,
+        "seconds": 0.406,
+        "pack": "breaking",
+        "source": "bfh1_metal_hit_04.ogg"
+      },
+      {
+        "file": "metal-4.ogg",
+        "bytes": 15916,
+        "seconds": 0.33,
+        "pack": "breaking",
+        "source": "bfh1_metal_hit_05.ogg"
+      },
+      {
+        "file": "metal-5.ogg",
+        "bytes": 18001,
+        "seconds": 0.371,
+        "pack": "breaking",
+        "source": "bfh1_metal_hit_06.ogg"
+      }
+    ],
+    "rock": [
+      {
+        "file": "rock-1.ogg",
+        "bytes": 36250,
+        "seconds": 0.916,
+        "pack": "breaking",
+        "source": "bfh1_rock_falling_01.ogg"
+      },
+      {
+        "file": "rock-2.ogg",
+        "bytes": 40966,
+        "seconds": 0.851,
+        "pack": "breaking",
+        "source": "bfh1_rock_falling_03.ogg"
+      },
+      {
+        "file": "rock-3.ogg",
+        "bytes": 19534,
+        "seconds": 0.565,
+        "pack": "breaking",
+        "source": "bfh1_rock_falling_05.ogg"
+      }
+    ],
+    "rockhit": [
+      {
+        "file": "rockhit-1.ogg",
+        "bytes": 7792,
+        "seconds": 0.109,
+        "pack": "breaking",
+        "source": "bfh1_rock_hit_01.ogg"
+      },
+      {
+        "file": "rockhit-2.ogg",
+        "bytes": 15560,
+        "seconds": 0.32,
+        "pack": "breaking",
+        "source": "bfh1_rock_falling_04.ogg"
+      }
+    ],
+    "rubble": [
+      {
+        "file": "rubble-1.ogg",
+        "bytes": 30092,
+        "seconds": 1.147,
+        "pack": "breaking",
+        "source": "bfh1_rock_breaking_01.ogg"
+      },
+      {
+        "file": "rubble-2.ogg",
+        "bytes": 45809,
+        "seconds": 0.865,
+        "pack": "breaking",
+        "source": "bfh1_rock_breaking_02.ogg"
+      }
+    ],
+    "shatter": [
+      {
+        "file": "shatter-1.ogg",
+        "bytes": 27455,
+        "seconds": 0.761,
+        "pack": "breaking",
+        "source": "bfh1_glass_breaking_01.ogg"
+      },
+      {
+        "file": "shatter-2.ogg",
+        "bytes": 31276,
+        "seconds": 0.776,
+        "pack": "breaking",
+        "source": "bfh1_glass_breaking_03.ogg"
+      }
+    ],
+    "bang": [
+      {
+        "file": "bang-1.ogg",
+        "bytes": 25714,
+        "seconds": 1.09,
+        "pack": "bang",
+        "source": "bang_03.ogg"
+      },
+      {
+        "file": "bang-2.ogg",
+        "bytes": 26825,
+        "seconds": 0.919,
+        "pack": "bang",
+        "source": "bang_07.ogg"
+      },
+      {
+        "file": "bang-3.ogg",
+        "bytes": 19195,
+        "seconds": 1.107,
+        "pack": "bang",
+        "source": "bang_09.ogg"
+      }
+    ],
+    "cannon": [
+      {
+        "file": "cannon-1.ogg",
+        "bytes": 38818,
+        "seconds": 0.864,
+        "pack": "bang",
+        "source": "cannon_03.ogg"
+      },
+      {
+        "file": "cannon-2.ogg",
+        "bytes": 39071,
+        "seconds": 0.918,
+        "pack": "bang",
+        "source": "cannon_04.ogg"
+      }
+    ],
+    "crack": [
+      {
+        "file": "crack-1.ogg",
+        "bytes": 21380,
+        "seconds": 0.459,
+        "pack": "bang",
+        "source": "shot_01.ogg"
+      },
+      {
+        "file": "crack-2.ogg",
+        "bytes": 19919,
+        "seconds": 0.374,
+        "pack": "bang",
+        "source": "shot_02.ogg"
+      }
+    ],
+    "swish": [
+      {
+        "file": "swish-1.wav",
+        "bytes": 11160,
+        "seconds": 0.126,
+        "pack": "swishes",
+        "source": "swishes/swish-1.wav"
+      },
+      {
+        "file": "swish-2.wav",
+        "bytes": 12908,
+        "seconds": 0.146,
+        "pack": "swishes",
+        "source": "swishes/swish-3.wav"
+      },
+      {
+        "file": "swish-3.wav",
+        "bytes": 12906,
+        "seconds": 0.146,
+        "pack": "swishes",
+        "source": "swishes/swish-4.wav"
+      },
+      {
+        "file": "swish-4.wav",
+        "bytes": 16580,
+        "seconds": 0.187,
+        "pack": "swishes",
+        "source": "swishes/swish-7.wav"
+      },
+      {
+        "file": "swish-5.wav",
+        "bytes": 17408,
+        "seconds": 0.197,
+        "pack": "swishes",
+        "source": "swishes/swish-9.wav"
+      }
+    ],
+    "whip": [
+      {
+        "file": "whip-1.wav",
+        "bytes": 9232,
+        "seconds": 0.104,
+        "pack": "swishes",
+        "source": "swishes/swish-11.wav"
+      },
+      {
+        "file": "whip-2.wav",
+        "bytes": 6750,
+        "seconds": 0.076,
+        "pack": "swishes",
+        "source": "swishes/swish-12.wav"
+      },
+      {
+        "file": "whip-3.wav",
+        "bytes": 6292,
+        "seconds": 0.071,
+        "pack": "swishes",
+        "source": "swishes/swish-13.wav"
+      }
+    ]
+  },
+  "packs": {
+    "kenney-interface": {
+      "title": "Interface Sounds",
+      "author": "Kenney",
+      "licence": "CC0-1.0",
+      "page": "https://opengameart.org/content/interface-sounds",
+      "archive": "https://opengameart.org/sites/default/files/kenney_interfaceSounds.zip"
+    },
+    "kenney-casino": {
+      "title": "Casino Audio",
+      "author": "Kenney",
+      "licence": "CC0-1.0",
+      "page": "https://opengameart.org/content/54-casino-sound-effects-cards-dice-chips",
+      "archive": "https://opengameart.org/sites/default/files/kenney_casino-audio.zip"
+    },
+    "kenney-rpg": {
+      "title": "RPG Audio",
+      "author": "Kenney",
+      "licence": "CC0-1.0",
+      "page": "https://opengameart.org/content/50-rpg-sound-effects",
+      "archive": "https://opengameart.org/sites/default/files/RPGsounds_Kenney.zip"
+    },
+    "rpg80": {
+      "title": "80 CC0 RPG SFX",
+      "author": "rubberduck",
+      "licence": "CC0-1.0",
+      "page": "https://opengameart.org/content/80-cc0-rpg-sfx",
+      "archive": "https://opengameart.org/sites/default/files/80-CC0-RPG-SFX_0.zip"
+    },
+    "sfx100": {
+      "title": "100 CC0 SFX",
+      "author": "rubberduck",
+      "licence": "CC0-1.0",
+      "page": "https://opengameart.org/content/100-cc0-sfx",
+      "archive": "https://opengameart.org/sites/default/files/100-CC0-SFX_0.zip"
+    },
+    "breaking": {
+      "title": "75 CC0 breaking / falling / hit sfx",
+      "author": "rubberduck",
+      "licence": "CC0-1.0",
+      "page": "https://opengameart.org/content/75-cc0-breaking-falling-hit-sfx",
+      "archive": "https://opengameart.org/sites/default/files/sfx_breaking_and_falling.zip"
+    },
+    "bang": {
+      "title": "25 CC0 bang / firework SFX",
+      "author": "rubberduck",
+      "licence": "CC0-1.0",
+      "page": "https://opengameart.org/content/25-cc0-bang-firework-sfx",
+      "archive": "https://opengameart.org/sites/default/files/25-CC0-bang-sfx.zip"
+    },
+    "swishes": {
+      "title": "Swishes Sound Pack",
+      "author": "artisticdude",
+      "licence": "CC0-1.0",
+      "page": "https://opengameart.org/content/swishes-sound-pack",
+      "archive": "https://opengameart.org/sites/default/files/swishes.zip"
+    }
+  },
+  "rejected": []
+}
