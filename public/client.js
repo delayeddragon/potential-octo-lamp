@@ -1,15 +1,16 @@
 /* ==========================================================================
    RuneDeck — lobby client
-   Animated backdrop, loadout bar (nickname / hero / deck) and matchmaking.
+   The navigation bar and the four screens behind its tabs (Play, Heroes, Deck
+   and Codex), the 3D stage they are laid over (lobby-stage.js), and matchmaking.
    It also owns the sound engine, so that the first click anywhere on the page
    (Find Match, usually) is what allows the battle to be heard: it starts the
    lobby's music, gives the interface its ticks and clicks, and mounts the
-   audio mixer in the top bar and in the match HUD.
+   audio mixer in the navigation bar and in the match HUD.
    ========================================================================== */
 
 import { bindMuteKey, createMixer } from './mixer.js';
 import { cardArt, iconArt, portraitArt } from './paint.js';
-import { CARDS, CHAMPIONS, CHAMPION_IDS, HERO, MATCH, sanitizeLoadout } from './shared.js';
+import { CARDS, CHAMPIONS, CHAMPION_IDS, MATCH, sanitizeLoadout } from './shared.js';
 import { SoundEngine } from './sound.js';
 
 const NICK_STORAGE_KEY = 'runedeck.nickname';
@@ -23,6 +24,40 @@ const RING_CIRCUMFERENCE = 2 * Math.PI * 88;
 const RESOLVE_BEAT_MS = 900;
 /** How often the search for an opponent is heard: a radar pulse. */
 const QUEUE_PULSE_MS = 2_000;
+/**
+ * How long a search lasts before an AI bot takes the other side: one minute, a rule
+ * of the game. The server times the search by the same figure, so everything the
+ * lobby says and shows about it (01:00) comes from here and from nowhere else.
+ */
+const QUEUE_TIMEOUT_MS = MATCH.queueTimeoutMs;
+
+/** The lobby's screens, in the order of their tabs. */
+const TABS = ['play', 'heroes', 'deck', 'codex'];
+const REALM_NAMES = { radiant: 'Radiant', dire: 'Dire' };
+
+/**
+ * Champions still to come. They stand in the roster as locked silhouettes and
+ * exist nowhere else: `bust` and `mark` are the silhouette's outline and what it
+ * carries, drawn in a 64 x 64 box.
+ */
+const TEASERS = [
+  {
+    id: 'sylva',
+    name: 'Sylva',
+    role: 'Frost Ranger',
+    tint: '#8fe3ff',
+    bust: 'M32 9c-8.5 0-14 7-14 16.5 0 5 1.6 9.3 4.4 12.3L11.5 42.5C7.5 44.3 5 48 5 52.5V64h54V52.5c0-4.5-2.5-8.2-6.5-10L41.6 37.8c2.8-3 4.4-7.3 4.4-12.3C46 16 40.5 9 32 9Z',
+    mark: 'M12 6c9 9 11 30 1 45M12 6 13 51M50 5l5.5 15M55 4l4 14',
+  },
+  {
+    id: 'vex',
+    name: 'Vex',
+    role: 'Void Weaver',
+    tint: '#b79bff',
+    bust: 'M32 4 21.5 19.5c-2.9 4.3-3.9 8.8-2.9 13.3.7 3.3 2.1 5.7 3.9 7.6L11.5 44.5C7.5 46.3 5 50 5 54.5V64h54v-9.5c0-4.5-2.5-8.2-6.5-10L41.5 40.4c1.8-1.9 3.2-4.3 3.9-7.6 1-4.5 0-9-2.9-13.3Z',
+    mark: 'M52 9.5a4.5 4.5 0 1 0 .01 0ZM52 2.5v2.5M52 19v2.5M43.5 14H46M58 14h2.5M10 12l3 4.5-3 4.5-3-4.5Z',
+  },
+];
 
 const QUEUE_MESSAGES = [
   'Scanning the realm for a worthy rival…',
@@ -48,6 +83,13 @@ function ringColor(progress) {
   return `rgb(${from.map((channel, i) => Math.round(channel + (to[i] - channel) * mix)).join(', ')})`;
 }
 
+/** Small line drawings the lobby builds for itself: everything else is in the page or painted (paint.js). */
+const GLYPHS = {
+  mana: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c4 5 6.5 8.4 6.5 11.5a6.5 6.5 0 0 1-13 0C5.5 11.4 8 8 12 3Z"/></svg>',
+  clock: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>',
+  lock: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5.5" y="10.5" width="13" height="9.5" rx="2"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></svg>',
+};
+
 const $ = (id) => document.getElementById(id);
 
 function el(tag, className, text) {
@@ -57,601 +99,14 @@ function el(tag, className, text) {
   return node;
 }
 
-const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
-
-/* -------------------------------------------------------------------------- */
-/* Animated backdrop                                                          */
-/* -------------------------------------------------------------------------- */
-
-/**
- * Full-screen canvas: faction-tinted void, the glowing River seam, drifting
- * arcane motes and runes, and the split Radiant/Dire emblem centred on `anchor`.
- */
-function createBackdrop(canvas, anchor) {
-  const ctx = canvas.getContext('2d', { alpha: false });
-  const TAU = Math.PI * 2;
-  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
-
-  // Rune strokes as [x1, y1, x2, y2] segments inside a unit box.
-  const RUNES = [
-    [[0, -0.5, 0, 0.5], [0, -0.32, 0.34, -0.5], [0, -0.02, 0.34, -0.2]],
-    [[0, -0.5, 0.36, 0], [0.36, 0, 0, 0.5], [0, 0.5, -0.36, 0], [-0.36, 0, 0, -0.5]],
-    [[0, -0.5, 0, 0.5], [0, -0.5, -0.34, -0.14], [0, -0.5, 0.34, -0.14]],
-    [[-0.34, -0.5, 0.34, 0.5], [0.34, -0.5, -0.34, 0.5]],
-    [[0.26, -0.5, -0.26, -0.12], [-0.26, -0.12, 0.26, 0.12], [0.26, 0.12, -0.26, 0.5]],
-    [[0, -0.5, 0, 0.5], [0, 0, -0.34, -0.42], [0, 0, 0.34, -0.42]],
-    [[-0.22, -0.5, -0.22, 0.5], [-0.22, -0.5, 0.26, -0.25], [0.26, -0.25, -0.22, 0], [-0.22, 0, 0.3, 0.5]],
-  ];
-  const DIAMOND_RUNE = 1;
-
-  const sprites = {
-    radiant: glowSprite('110, 215, 255'),
-    dire: glowSprite('255, 122, 48'),
-    river: glowSprite('150, 255, 232'),
-  };
-  const cracks = buildCracks();
-  const emblem = { x: 0, y: 0, r: 100 };
-  const pointer = { x: 0, y: 0, tx: 0, ty: 0 };
-
-  let width = 0;
-  let height = 0;
-  let dpr = 1;
-  let base = null;
-  let motes = [];
-  let glyphs = [];
-  let energy = 0;
-  let energyTarget = 0;
-  let flash = 0;
-  let ringAngle = 0;
-  let time = 0;
-  let last = 0;
-
-  function glowSprite(rgb) {
-    const sprite = document.createElement('canvas');
-    sprite.width = sprite.height = 64;
-    const g = sprite.getContext('2d');
-    const gradient = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-    gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
-    gradient.addColorStop(0.14, `rgba(${rgb}, 0.9)`);
-    gradient.addColorStop(0.42, `rgba(${rgb}, 0.22)`);
-    gradient.addColorStop(1, `rgba(${rgb}, 0)`);
-    g.fillStyle = gradient;
-    g.fillRect(0, 0, 64, 64);
-    return sprite;
-  }
-
-  // Seeded so the molten cracks keep the same shape on every load.
-  function buildCracks() {
-    let seed = 0x52756e65;
-    const rand = () => {
-      seed = (seed + 0x6d2b79f5) | 0;
-      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
-    const list = [];
-    for (let i = 0; i < 6; i++) {
-      let x = 0.04;
-      let y = -0.74 + i * 0.3 + (rand() - 0.5) * 0.1;
-      let heading = (rand() - 0.5) * 1.1;
-      const points = [[x, y]];
-      while (x * x + y * y < 1 && points.length < 12) {
-        heading = clamp(heading + (rand() - 0.5) * 1.0, -1.15, 1.15);
-        const step = 0.1 + rand() * 0.1;
-        x += Math.cos(heading) * step;
-        y += Math.sin(heading) * step;
-        points.push([x, y]);
-      }
-      list.push(points);
-    }
-    return list;
-  }
-
-  function resize() {
-    dpr = Math.min(window.devicePixelRatio || 1, 2);
-    width = window.innerWidth;
-    height = window.innerHeight;
-    canvas.width = Math.round(width * dpr);
-    canvas.height = Math.round(height * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    paintBase();
-    const moteCount = Math.round(clamp((width * height) / 9000, 70, 200));
-    motes = Array.from({ length: moteCount }, () => spawnMote(true));
-    glyphs = Array.from({ length: 14 }, () => spawnGlyph(true));
-    if (reducedMotion.matches) render(0);
-  }
-
-  // The static void is painted once per resize and blitted every frame.
-  function paintBase() {
-    base = document.createElement('canvas');
-    base.width = canvas.width;
-    base.height = canvas.height;
-    const b = base.getContext('2d');
-    b.scale(dpr, dpr);
-
-    const sweep = b.createLinearGradient(0, 0, width, 0);
-    sweep.addColorStop(0, '#07142e');
-    sweep.addColorStop(0.46, '#060914');
-    sweep.addColorStop(0.54, '#0a0711');
-    sweep.addColorStop(1, '#240a0d');
-    b.fillStyle = sweep;
-    b.fillRect(0, 0, width, height);
-
-    const reach = Math.max(width, height) * 0.62;
-    for (const [x, color] of [[0.14, '34, 120, 220'], [0.86, '214, 54, 28']]) {
-      const glow = b.createRadialGradient(width * x, height * 0.62, 0, width * x, height * 0.62, reach);
-      glow.addColorStop(0, `rgba(${color}, 0.34)`);
-      glow.addColorStop(1, `rgba(${color}, 0)`);
-      b.fillStyle = glow;
-      b.fillRect(0, 0, width, height);
-    }
-
-    const vignette = b.createRadialGradient(
-      width / 2, height * 0.5, Math.min(width, height) * 0.3,
-      width / 2, height * 0.5, Math.max(width, height) * 0.78,
-    );
-    vignette.addColorStop(0, 'rgba(0, 0, 0, 0)');
-    vignette.addColorStop(1, 'rgba(0, 0, 0, 0.74)');
-    b.fillStyle = vignette;
-    b.fillRect(0, 0, width, height);
-  }
-
-  function spawnMote(anywhere) {
-    const x = Math.random() * width;
-    const offset = (x - width / 2) / width;
-    const kind = Math.abs(offset) < 0.03 ? 'river' : offset < 0 ? 'radiant' : 'dire';
-    const depth = 0.35 + Math.random() * 0.65;
-    const speed = kind === 'radiant' ? 8 + Math.random() * 16 : kind === 'dire' ? 16 + Math.random() * 34 : 30 + Math.random() * 42;
-    return {
-      kind,
-      depth,
-      x,
-      y: anywhere ? Math.random() * height : height + 20,
-      vy: -speed * depth,
-      sway: kind === 'river' ? 3 + Math.random() * 6 : 6 + Math.random() * 22,
-      swaySpeed: 0.3 + Math.random() * 0.9,
-      phase: Math.random() * TAU,
-      size: (0.6 + Math.random() * 1.7) * depth * (kind === 'dire' ? 1.1 : 1.4),
-      twinkle: 1 + Math.random() * 3,
-    };
-  }
-
-  function spawnGlyph(anywhere) {
-    return {
-      x: Math.random() * width,
-      y: anywhere ? Math.random() * height : height + 40,
-      vy: -(4 + Math.random() * 9),
-      size: 14 + Math.random() * 30,
-      rot: (Math.random() - 0.5) * 0.8,
-      spin: (Math.random() - 0.5) * 0.15,
-      rune: Math.floor(Math.random() * RUNES.length),
-      alpha: 0.05 + Math.random() * 0.11,
-      phase: Math.random() * TAU,
-    };
-  }
-
-  function strokeRune(index, x, y, size, rotation) {
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(rotation);
-    ctx.beginPath();
-    for (const [x1, y1, x2, y2] of RUNES[index]) {
-      ctx.moveTo(x1 * size, y1 * size);
-      ctx.lineTo(x2 * size, y2 * size);
-    }
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  function drawRiver() {
-    const x = emblem.x;
-    const band = Math.max(120, width * 0.11);
-    const glow = ctx.createLinearGradient(x - band, 0, x + band, 0);
-    glow.addColorStop(0, 'rgba(60, 220, 230, 0)');
-    glow.addColorStop(0.5, `rgba(70, 225, 235, ${0.1 + 0.035 * Math.sin(time * 0.8) + 0.07 * energy})`);
-    glow.addColorStop(1, 'rgba(60, 220, 230, 0)');
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.fillStyle = glow;
-    ctx.fillRect(x - band, 0, band * 2, height);
-
-    ctx.beginPath();
-    for (let y = 0; y <= height + 24; y += 24) {
-      const wobble = Math.sin(y * 0.012 + time * 1.1) * 5 + Math.sin(y * 0.031 - time * 0.7) * 2.5;
-      if (y === 0) ctx.moveTo(x + wobble, y);
-      else ctx.lineTo(x + wobble, y);
-    }
-    ctx.strokeStyle = 'rgba(150, 250, 245, 0.2)';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-    ctx.globalCompositeOperation = 'source-over';
-  }
-
-  function drawGlyphs(dt) {
-    ctx.lineWidth = 1.5;
-    ctx.lineCap = 'round';
-    for (const glyph of glyphs) {
-      glyph.y += glyph.vy * dt;
-      glyph.rot += glyph.spin * dt;
-      if (glyph.y < -50) Object.assign(glyph, spawnGlyph(false));
-      const fade = clamp(glyph.y / (height * 0.25), 0, 1) * clamp((height - glyph.y) / (height * 0.2), 0, 1);
-      ctx.globalAlpha = glyph.alpha * fade * (0.6 + 0.4 * Math.sin(time * 0.7 + glyph.phase));
-      ctx.strokeStyle = glyph.x < emblem.x ? 'rgb(120, 215, 255)' : 'rgb(255, 130, 80)';
-      strokeRune(glyph.rune, glyph.x + pointer.x * 6, glyph.y, glyph.size, glyph.rot);
-    }
-    ctx.globalAlpha = 1;
-  }
-
-  function drawMotes(dt) {
-    ctx.globalCompositeOperation = 'lighter';
-    const rush = 1 + energy * 0.9;
-    for (const mote of motes) {
-      mote.y += mote.vy * dt * rush;
-      if (mote.y < -20) Object.assign(mote, spawnMote(false));
-      const x = mote.x + Math.sin(time * mote.swaySpeed + mote.phase) * mote.sway + pointer.x * mote.depth * 14;
-      const fade = clamp(mote.y / (height * 0.18), 0, 1) * clamp((height - mote.y) / (height * 0.1), 0, 1);
-      const twinkle = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(time * mote.twinkle + mote.phase));
-      const size = mote.size * 7;
-      ctx.globalAlpha = twinkle * fade * mote.depth;
-      ctx.drawImage(sprites[mote.kind], x - size, mote.y - size, size * 2, size * 2);
-    }
-    ctx.globalAlpha = 1;
-    ctx.globalCompositeOperation = 'source-over';
-  }
-
-  function facets(r, mirror, focusX, focusY, alphas, edge) {
-    ctx.lineWidth = Math.max(0.6, r * 0.007);
-    ctx.strokeStyle = edge;
-    for (let k = 0; k < 6; k++) {
-      const a0 = 1.5 * Math.PI - (k * Math.PI) / 6;
-      const a1 = a0 - Math.PI / 6;
-      ctx.beginPath();
-      ctx.moveTo(focusX * r, focusY * r);
-      ctx.lineTo(mirror * Math.cos(a0) * r, Math.sin(a0) * r);
-      ctx.lineTo(mirror * Math.cos(a1) * r, Math.sin(a1) * r);
-      ctx.closePath();
-      ctx.fillStyle = `rgba(255, 255, 255, ${alphas[k]})`;
-      ctx.fill();
-      ctx.stroke();
-    }
-  }
-
-  function crystal(baseX, baseY, w, h, lean) {
-    ctx.save();
-    ctx.translate(baseX, baseY);
-    ctx.rotate(lean);
-    const body = ctx.createLinearGradient(0, -h, 0, 0);
-    body.addColorStop(0, '#ffffff');
-    body.addColorStop(0.45, '#b4f0ff');
-    body.addColorStop(1, '#3d9be0');
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(w / 2, -h * 0.18);
-    ctx.lineTo(w / 2, -h * 0.78);
-    ctx.lineTo(0, -h);
-    ctx.lineTo(-w / 2, -h * 0.78);
-    ctx.lineTo(-w / 2, -h * 0.18);
-    ctx.closePath();
-    ctx.fillStyle = body;
-    ctx.fill();
-    ctx.shadowBlur = 0;
-    // Shaded right face gives the shard its cut.
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(w / 2, -h * 0.18);
-    ctx.lineTo(w / 2, -h * 0.78);
-    ctx.lineTo(0, -h);
-    ctx.closePath();
-    ctx.fillStyle = 'rgba(12, 70, 150, 0.32)';
-    ctx.fill();
-    ctx.restore();
-  }
-
-  function flamePath(scale) {
-    ctx.beginPath();
-    ctx.moveTo(0, -1 * scale);
-    ctx.bezierCurveTo(0.15 * scale, -0.55 * scale, 0.7 * scale, -0.25 * scale, 0.62 * scale, 0.35 * scale);
-    ctx.bezierCurveTo(0.58 * scale, 0.75 * scale, 0.3 * scale, scale, 0, scale);
-    ctx.bezierCurveTo(-0.3 * scale, scale, -0.6 * scale, 0.78 * scale, -0.62 * scale, 0.38 * scale);
-    ctx.bezierCurveTo(-0.64 * scale, 0.1 * scale, -0.45 * scale, -0.05 * scale, -0.4 * scale, -0.3 * scale);
-    ctx.bezierCurveTo(-0.3 * scale, -0.12 * scale, -0.2 * scale, -0.1 * scale, -0.15 * scale, -0.2 * scale);
-    ctx.bezierCurveTo(-0.2 * scale, -0.55 * scale, -0.1 * scale, -0.8 * scale, 0, -1 * scale);
-    ctx.closePath();
-  }
-
-  function drawEmblem() {
-    const r = emblem.r;
-    const pulse = 0.5 + 0.5 * Math.sin(time * 1.7);
-    const cx = emblem.x + pointer.x * r * 0.06;
-    const cy = emblem.y + Math.sin(time * 0.9) * r * 0.03 + pointer.y * r * 0.06;
-
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-
-    // Faction halos.
-    ctx.globalCompositeOperation = 'lighter';
-    for (const [sign, rgb] of [[-1, '60, 190, 255'], [1, '255, 84, 40']]) {
-      const extent = r * 2.7;
-      const halo = ctx.createRadialGradient(0, 0, r * 0.6, 0, 0, extent);
-      halo.addColorStop(0, `rgba(${rgb}, ${0.3 + 0.1 * pulse + 0.14 * energy})`);
-      halo.addColorStop(1, `rgba(${rgb}, 0)`);
-      ctx.fillStyle = halo;
-      ctx.fillRect(sign < 0 ? -extent : 0, -extent, extent, extent * 2);
-    }
-    ctx.globalCompositeOperation = 'source-over';
-
-    // Cyan -> gold -> crimson metal, fixed in screen space while the rings turn.
-    const metal = ctx.createLinearGradient(-r * 1.5, 0, r * 1.5, 0);
-    metal.addColorStop(0, 'rgba(110, 225, 255, 0.95)');
-    metal.addColorStop(0.5, 'rgba(246, 222, 146, 0.95)');
-    metal.addColorStop(1, 'rgba(255, 104, 84, 0.95)');
-
-    ctx.strokeStyle = metal;
-    ctx.globalAlpha = 0.55 + 0.25 * energy;
-    ctx.lineWidth = Math.max(1, r * 0.012);
-    ctx.setLineDash([r * 0.05, r * 0.045]);
-    ctx.lineDashOffset = -ringAngle * r * 1.46;
-    ctx.beginPath();
-    ctx.arc(0, 0, r * 1.46, 0, TAU);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // Orbiting runes take the colour of the half they pass through.
-    ctx.lineWidth = Math.max(1, r * 0.014);
-    for (let i = 0; i < 16; i++) {
-      const angle = -ringAngle * 0.6 + (i / 16) * TAU;
-      const x = Math.cos(angle) * r * 1.28;
-      const y = Math.sin(angle) * r * 1.28;
-      ctx.globalAlpha = 0.4 + 0.45 * (0.5 + 0.5 * Math.sin(time * 2 + i * 1.7));
-      ctx.strokeStyle = x < 0 ? 'rgb(140, 232, 255)' : 'rgb(255, 150, 96)';
-      strokeRune(i % RUNES.length, x, y, r * 0.085, angle + Math.PI / 2);
-    }
-
-    ctx.strokeStyle = metal;
-    for (let i = 0; i < 60; i++) {
-      const angle = ringAngle * 0.35 + (i / 60) * TAU;
-      const major = i % 5 === 0;
-      const inner = r * (major ? 1.085 : 1.105);
-      ctx.globalAlpha = major ? 0.8 : 0.45;
-      ctx.lineWidth = Math.max(0.7, r * (major ? 0.012 : 0.006));
-      ctx.beginPath();
-      ctx.moveTo(Math.cos(angle) * inner, Math.sin(angle) * inner);
-      ctx.lineTo(Math.cos(angle) * r * 1.135, Math.sin(angle) * r * 1.135);
-      ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
-
-    // ---- Radiant half: cut crystal.
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(0, 0, r, Math.PI / 2, Math.PI * 1.5);
-    ctx.closePath();
-    ctx.clip();
-    const ice = ctx.createRadialGradient(-r * 0.5, -r * 0.4, r * 0.05, -r * 0.2, 0, r * 1.15);
-    ice.addColorStop(0, '#d9fbff');
-    ice.addColorStop(0.22, '#58c6f7');
-    ice.addColorStop(0.6, '#1a5cb0');
-    ice.addColorStop(1, '#0a1f4d');
-    ctx.fillStyle = ice;
-    ctx.fillRect(-r, -r, r, r * 2);
-    facets(r, 1, -0.36, -0.08, [0.26, 0.05, 0.17, 0.02, 0.12, 0.06], 'rgba(215, 248, 255, 0.3)');
-
-    ctx.shadowColor = 'rgba(150, 235, 255, 0.9)';
-    ctx.shadowBlur = r * 0.12;
-    crystal(-r * 0.7, r * 0.42, r * 0.15, r * 0.5, -0.38);
-    ctx.shadowBlur = r * 0.12;
-    crystal(-r * 0.32, r * 0.44, r * 0.14, r * 0.46, 0.34);
-    ctx.shadowBlur = r * 0.16;
-    crystal(-r * 0.51, r * 0.5, r * 0.2, r * 0.86, 0);
-
-    const sheenAt = (-1.5 + ((time * 0.26) % 1) * 2.4) * r;
-    const sheen = ctx.createLinearGradient(sheenAt - r * 0.2, -r * 0.1, sheenAt + r * 0.2, r * 0.1);
-    sheen.addColorStop(0, 'rgba(255, 255, 255, 0)');
-    sheen.addColorStop(0.5, 'rgba(255, 255, 255, 0.34)');
-    sheen.addColorStop(1, 'rgba(255, 255, 255, 0)');
-    ctx.fillStyle = sheen;
-    ctx.fillRect(-r, -r, r, r * 2);
-    ctx.restore();
-
-    // ---- Dire half: molten obsidian.
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(0, 0, r, -Math.PI / 2, Math.PI / 2);
-    ctx.closePath();
-    ctx.clip();
-    const obsidian = ctx.createRadialGradient(r * 0.4, r * 0.3, r * 0.05, r * 0.3, 0, r * 1.1);
-    obsidian.addColorStop(0, '#54190f');
-    obsidian.addColorStop(0.45, '#1f0b0d');
-    obsidian.addColorStop(1, '#080405');
-    ctx.fillStyle = obsidian;
-    ctx.fillRect(0, -r, r, r * 2);
-    facets(r, -1, 0.34, 0.1, [0.075, 0.015, 0.05, 0.0, 0.035, 0.02], 'rgba(255, 170, 130, 0.13)');
-
-    cracks.forEach((points, i) => {
-      const heat = 0.5 + 0.5 * Math.sin(time * 1.3 + i * 2.1);
-      ctx.beginPath();
-      points.forEach(([px, py], n) => (n === 0 ? ctx.moveTo(px * r, py * r) : ctx.lineTo(px * r, py * r)));
-      ctx.shadowColor = 'rgba(255, 90, 20, 0.95)';
-      ctx.shadowBlur = r * 0.12;
-      ctx.strokeStyle = `rgba(255, ${Math.round(105 + heat * 60)}, 40, ${0.5 + 0.4 * heat})`;
-      ctx.lineWidth = r * 0.03;
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-      ctx.strokeStyle = `rgba(255, 238, 176, ${0.45 + 0.5 * heat})`;
-      ctx.lineWidth = Math.max(0.8, r * 0.01);
-      ctx.stroke();
-    });
-
-    ctx.save();
-    ctx.translate(r * 0.52, r * 0.06);
-    ctx.transform(1, 0, Math.sin(time * 4.3) * 0.05, 1 + Math.sin(time * 6.1) * 0.035, 0, 0);
-    const outerFlame = ctx.createLinearGradient(0, -r * 0.42, 0, r * 0.42);
-    outerFlame.addColorStop(0, '#ffb445');
-    outerFlame.addColorStop(0.55, '#f2551c');
-    outerFlame.addColorStop(1, '#a8140f');
-    ctx.shadowColor = 'rgba(255, 110, 30, 0.95)';
-    ctx.shadowBlur = r * 0.2;
-    ctx.fillStyle = outerFlame;
-    flamePath(r * 0.42);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.translate(0, r * 0.15);
-    ctx.fillStyle = '#ffe9a8';
-    flamePath(r * 0.24);
-    ctx.fill();
-    ctx.restore();
-    ctx.restore();
-
-    // ---- Gold bezel.
-    let bezel = '#d9b24c';
-    if (ctx.createConicGradient) {
-      bezel = ctx.createConicGradient(time * 0.25, 0, 0);
-      const stops = ['#7a5415', '#fbe9ae', '#b98a2c', '#fff5cf', '#7a5415', '#e7c263', '#8d6219', '#fbe9ae', '#7a5415'];
-      stops.forEach((color, i) => bezel.addColorStop(i / (stops.length - 1), color));
-    }
-    ctx.strokeStyle = bezel;
-    ctx.lineWidth = r * 0.075;
-    ctx.beginPath();
-    ctx.arc(0, 0, r, 0, TAU);
-    ctx.stroke();
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
-    ctx.lineWidth = Math.max(0.8, r * 0.012);
-    for (const radius of [r * 0.96, r * 1.04]) {
-      ctx.beginPath();
-      ctx.arc(0, 0, radius, 0, TAU);
-      ctx.stroke();
-    }
-
-    // ---- The River: a blade of light dividing the two realms.
-    const blade = ctx.createLinearGradient(0, -r * 1.62, 0, r * 1.62);
-    blade.addColorStop(0, 'rgba(140, 255, 240, 0)');
-    blade.addColorStop(0.2, 'rgba(140, 255, 240, 0.9)');
-    blade.addColorStop(0.5, '#ffffff');
-    blade.addColorStop(0.8, 'rgba(140, 255, 240, 0.9)');
-    blade.addColorStop(1, 'rgba(140, 255, 240, 0)');
-    ctx.shadowColor = 'rgba(90, 240, 255, 0.95)';
-    ctx.shadowBlur = r * (0.16 + 0.08 * pulse + 0.12 * energy);
-    ctx.fillStyle = blade;
-    ctx.beginPath();
-    ctx.moveTo(0, -r * 1.62);
-    ctx.lineTo(r * 0.032, 0);
-    ctx.lineTo(0, r * 1.62);
-    ctx.lineTo(-r * 0.032, 0);
-    ctx.closePath();
-    ctx.fill();
-    ctx.shadowBlur = 0;
-
-    ctx.globalCompositeOperation = 'lighter';
-    for (let k = 0; k < 4; k++) {
-      const progress = (time * (0.3 + energy * 0.5) + k / 4) % 1;
-      const size = r * 0.11;
-      ctx.globalAlpha = Math.sin(progress * Math.PI);
-      ctx.drawImage(sprites.river, -size, r * 1.5 - progress * r * 3 - size, size * 2, size * 2);
-    }
-    ctx.globalAlpha = 1;
-    ctx.globalCompositeOperation = 'source-over';
-
-    // ---- Central rune seal.
-    const half = r * 0.19;
-    ctx.save();
-    ctx.rotate(Math.PI / 4);
-    ctx.shadowColor = 'rgba(255, 220, 130, 0.9)';
-    ctx.shadowBlur = r * (0.12 + 0.1 * pulse);
-    ctx.fillStyle = '#0a0e1c';
-    ctx.fillRect(-half, -half, half * 2, half * 2);
-    ctx.shadowBlur = 0;
-    ctx.strokeStyle = bezel;
-    ctx.lineWidth = r * 0.03;
-    ctx.strokeRect(-half, -half, half * 2, half * 2);
-    ctx.restore();
-
-    ctx.save();
-    ctx.rotate(Math.PI / 4 - ringAngle * 1.4);
-    ctx.strokeStyle = 'rgba(246, 220, 140, 0.5)';
-    ctx.lineWidth = Math.max(0.8, r * 0.009);
-    ctx.strokeRect(-half * 1.42, -half * 1.42, half * 2.84, half * 2.84);
-    ctx.restore();
-
-    ctx.shadowColor = 'rgba(120, 245, 255, 0.95)';
-    ctx.shadowBlur = r * 0.08;
-    ctx.strokeStyle = `rgba(214, 255, 250, ${0.75 + 0.25 * pulse})`;
-    ctx.lineWidth = Math.max(1, r * 0.022);
-    strokeRune(DIAMOND_RUNE, 0, 0, r * 0.17, 0);
-    ctx.shadowBlur = 0;
-
-    if (flash > 0.01) {
-      ctx.globalCompositeOperation = 'lighter';
-      const burst = ctx.createRadialGradient(0, 0, 0, 0, 0, r * 4.5);
-      burst.addColorStop(0, `rgba(255, 244, 210, ${flash})`);
-      burst.addColorStop(1, 'rgba(255, 244, 210, 0)');
-      ctx.fillStyle = burst;
-      ctx.fillRect(-r * 4.5, -r * 4.5, r * 9, r * 9);
-    }
-    ctx.restore();
-  }
-
-  function render(dt) {
-    time += dt;
-    energy += (energyTarget - energy) * Math.min(1, dt * 3);
-    flash = Math.max(0, flash - dt * 1.5);
-    ringAngle += dt * (0.12 + energy * 0.55);
-    pointer.x += (pointer.tx - pointer.x) * Math.min(1, dt * 4);
-    pointer.y += (pointer.ty - pointer.y) * Math.min(1, dt * 4);
-
-    // Re-read every frame so the emblem tracks layout shifts and scrolling.
-    const rect = anchor.getBoundingClientRect();
-    emblem.x = rect.left + rect.width / 2;
-    emblem.y = rect.top + rect.height / 2;
-    emblem.r = Math.min(rect.width, rect.height) * 0.3;
-
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.globalAlpha = 1;
-    ctx.drawImage(base, 0, 0, width, height);
-    drawRiver();
-    drawGlyphs(dt);
-    drawEmblem();
-    drawMotes(dt);
-  }
-
-  let paused = false;
-
-  function loop(now) {
-    const dt = Math.min((now - last) / 1000, 0.05);
-    last = now;
-    if (!paused && !reducedMotion.matches) render(dt);
-    requestAnimationFrame(loop);
-  }
-
-  window.addEventListener('resize', resize);
-  window.addEventListener('pointermove', (event) => {
-    pointer.tx = (event.clientX / width) * 2 - 1;
-    pointer.ty = (event.clientY / height) * 2 - 1;
-  });
-
-  time = 2.4;
-  resize();
-  last = performance.now();
-  requestAnimationFrame(loop);
-
-  return {
-    /** 0 = idle lobby, 1 = searching: rings spin up and motes rush. */
-    setEnergy(value) {
-      energyTarget = value;
-      if (reducedMotion.matches) {
-        energy = value;
-        render(0);
-      }
-    },
-    flash() {
-      if (!reducedMotion.matches) flash = 0.85;
-    },
-    /** Stops drawing while the battlefield owns the screen. */
-    setPaused(value) {
-      paused = value;
-    },
-  };
+/** One of `GLYPHS` in a span of its own. */
+function glyph(name, className) {
+  const node = el('span', className);
+  node.innerHTML = GLYPHS[name];
+  return node;
 }
+
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 /* -------------------------------------------------------------------------- */
 /* State and DOM                                                              */
@@ -659,16 +114,41 @@ function createBackdrop(canvas, anchor) {
 
 const dom = {
   app: $('app'),
+  tabs: [...document.querySelectorAll('#tabs .tab')],
+  screens: Object.fromEntries(TABS.map((tab) => [tab, $(`screen-${tab}`)])),
+  /** The box each screen keeps clear for the champion on the stage. */
+  spots: Object.fromEntries(TABS.map((tab) => [tab, $(`screen-${tab}`).querySelector('.hero-spot')])),
   nickname: $('nickname'),
-  champions: $('champions'),
-  abilities: $('champion-abilities'),
+  plateRealm: $('plate-realm'),
+  plateName: $('plate-name'),
+  plateTitle: $('plate-title'),
+  loadoutPortrait: $('loadout-portrait'),
+  loadoutName: $('loadout-name'),
+  loadoutRole: $('loadout-role'),
+  loadoutRealm: $('loadout-realm'),
+  loadoutAvg: $('loadout-avg'),
+  loadoutDeck: $('loadout-deck'),
+  changeHeroBtn: $('btn-change-hero'),
+  editDeckBtn: $('btn-edit-deck'),
+  modeLimit: $('mode-limit'),
+  roster: $('roster'),
+  rosterCount: $('roster-count'),
+  heroTurn: $('hero-turn'),
+  sheet: $('sheet'),
+  sheetRealm: $('sheet-realm'),
+  sheetRole: $('sheet-role'),
+  sheetName: $('sheet-name'),
+  sheetLore: $('sheet-lore'),
+  meters: [...$('sheet-meters').children],
+  sheetKit: $('sheet-kit'),
+  equipBtn: $('btn-equip'),
+  equipLabel: $('equip-label'),
   deck: $('deck'),
   reserve: $('reserve'),
   builderHint: $('builder-hint'),
   deckCount: $('deck-count'),
   deckAvg: $('deck-avg'),
   findBtn: $('btn-find'),
-  modeLine: $('mode-line'),
   conn: $('conn'),
   connText: $('conn-text'),
   lobbyStats: $('lobby-stats'),
@@ -698,14 +178,18 @@ const dom = {
 };
 
 const state = {
-  /** @type {'lobby' | 'queue' | 'match'} */
+  /** @type {'lobby' | 'queue' | 'match' | 'game'} */
   phase: 'lobby',
+  /** @type {'play' | 'heroes' | 'deck' | 'codex'} The lobby screen on show. */
+  tab: 'play',
   connected: false,
   config: null,
-  queue: { startedAt: 0, timeoutMs: 60_000, running: false },
+  queue: { startedAt: 0, running: false },
   match: null,
-  /** The player's champion id and Battle Deck (`MATCH.deckSize` card ids); `reserve` holds the rest of the pool. */
+  /** The player's equipped champion and Battle Deck (`MATCH.deckSize` card ids); `reserve` holds the rest of the pool. */
   loadout: { hero: CHAMPION_IDS[0], deck: [], reserve: [] },
+  /** The champion on show on the Heroes tab: looked over there, and taken into battle only once it is equipped. */
+  inspect: CHAMPION_IDS[0],
   /** The card picked up in the deck builder, waiting for the card it swaps with. */
   pick: null,
   resolveTimer: 0,
@@ -713,11 +197,12 @@ const state = {
   pulseTimer: 0,
 };
 
-const backdrop = createBackdrop($('backdrop'), $('emblem-slot'));
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+const stage = createStage();
 /** Every sound and all the music of the game. It wakes on the player's first click or key press. */
 const sound = new SoundEngine();
 sound.setMusic('lobby');
-/** The same mixer twice: in the top bar, and beside Leave Match in the match HUD. */
+/** The same mixer twice: in the navigation bar, and beside Leave Match in the match HUD. */
 const mixers = [createMixer($('lobby-mixer'), sound), createMixer($('hud-mixer'), sound)];
 bindMuteKey(sound);
 const socket = typeof window.io === 'function' ? window.io() : null;
@@ -731,6 +216,8 @@ function setPhase(phase) {
   if (phase !== 'lobby') clearPick();
   for (const mixer of mixers) mixer.close();
   hideTooltip();
+  // The battle has the whole machine: the stage draws nothing from the moment a match begins until the lobby is back.
+  stage.setPaused(phase === 'game');
 }
 
 function setText(node, text) {
@@ -743,26 +230,120 @@ function formatClock(ms) {
 }
 
 /* -------------------------------------------------------------------------- */
+/* The stage                                                                  */
+/* -------------------------------------------------------------------------- */
+
+/** The box on screen the champion stands in: each screen keeps one clear for it. */
+function heroSpot() {
+  return dom.spots[state.tab].getBoundingClientRect();
+}
+
+/**
+ * The hall behind the lobby and the champion standing in it (lobby-stage.js).
+ * Its scripts, Three.js among them, are fetched once the lobby is up and usable;
+ * until they have run, and in a browser without WebGL 2, the sky the stylesheet
+ * paints holds the page. What the lobby asks of the stage in the meantime is
+ * kept here and handed over when it arrives.
+ */
+function createStage() {
+  const want = { hero: CHAMPION_IDS[0], view: 'play', energy: 0, paused: false, busy: false };
+  let live = null;
+
+  return {
+    async open() {
+      document.body.dataset.stage = 'loading';
+      try {
+        const { createLobbyStage } = await import('./lobby-stage.js');
+        const made = await createLobbyStage($('stage'), {
+          spot: heroSpot,
+          dragSurface: dom.heroTurn,
+          hero: want.hero,
+          view: want.view,
+          // A machine that cannot keep the hall smooth is not asked to blur it behind every panel as well.
+          onQuality: (quality) => document.body.classList.toggle('lite', quality < 1),
+        });
+        // Whatever was asked for while it was being built.
+        made.setHero(want.hero);
+        made.setView(want.view);
+        made.setEnergy(want.energy);
+        made.setBusy(want.busy);
+        made.setPaused(want.paused);
+        live = made;
+        document.body.dataset.stage = 'live';
+        // Console diagnostics: runedeck.lobby.stats() reports the stage's FPS, framing and champion.
+        window.runedeck = { ...window.runedeck, lobby: { stats: made.stats, lockQuality: made.lockQuality } };
+      } catch (error) {
+        console.warn('The lobby stage could not start; the lobby goes on without it.', error);
+        document.body.dataset.stage = 'off';
+      }
+    },
+    /** Puts a champion on the pedestal; with `flourish` it salutes with its weapon. */
+    setHero(id, options) {
+      want.hero = id;
+      live?.setHero(id, options);
+    },
+    /** Frames the champion for a tab. */
+    setView(name) {
+      want.view = name;
+      live?.setView(name);
+    },
+    /** 0 in the quiet lobby, 1 while a search is on. */
+    setEnergy(value) {
+      want.energy = value;
+      live?.setEnergy(value);
+    },
+    flash() {
+      live?.flash();
+    },
+    /** Stops the stage drawing altogether, or starts it again. */
+    setPaused(value) {
+      want.paused = value;
+      live?.setPaused(value);
+    },
+    /** The page is busy building the battlefield: slow frames are not the stage's doing. */
+    setBusy(value) {
+      want.busy = value;
+      live?.setBusy(value);
+    },
+  };
+}
+
+/** The champion on the pedestal: whoever is being looked over on the Heroes tab, the equipped one everywhere else. */
+function shownHero() {
+  return state.tab === 'heroes' ? state.inspect : state.loadout.hero;
+}
+
+/** Puts the champion its screen calls for on the pedestal, and turns the lobby to that champion's realm. */
+function presentHero({ flourish = false } = {}) {
+  const champion = CHAMPIONS[shownHero()];
+  document.body.dataset.realm = champion.faction;
+  stage.setHero(champion.id, { flourish });
+}
+
+/* -------------------------------------------------------------------------- */
 /* Interface sounds                                                           */
 /* -------------------------------------------------------------------------- */
 
 /** Buttons that say something of their own when pressed; the plain click would only muddy it. */
-const OWN_VOICE = '#btn-find, .hero-chip, .deck-card, .hand-card, .skill, .mixer-mute';
+const OWN_VOICE = '#btn-find, #btn-equip, .roster-card, .deck-card, .hand-card, .skill, .mixer-mute';
 /** The match's own controls are passed over many times a minute: they do not tick under the pointer. */
 const NO_HOVER = '.hand-card, .skill';
+
+/** A button that will not act: disabled outright, or only marked so to keep its place in the tab order. */
+const isOff = (button) => button.disabled || button.getAttribute('aria-disabled') === 'true';
 
 let hovered = null;
 /** Where the mouse last was. A button that turns up under a mouse that has not moved was redrawn, not found. */
 const mouseAt = { x: NaN, y: NaN };
 
-// Every button on the page ticks as the mouse comes over it, and latches when it is pressed.
+// Every button on the page, the tabs among them, ticks as the mouse comes over it, and latches when it is pressed.
 document.addEventListener('pointerover', (event) => {
   if (event.pointerType !== 'mouse') return;
   const button = event.target.closest?.('button') ?? null;
   if (button === hovered) return;
   hovered = button;
   const moved = event.clientX !== mouseAt.x || event.clientY !== mouseAt.y;
-  if (moved && button && !button.disabled && !button.matches(NO_HOVER)) sound.play('uiHover');
+  if (moved && button && !isOff(button) && !button.matches(NO_HOVER)) sound.play('uiHover');
 });
 // The browser reports what the mouse has come over before it reports the move, so `mouseAt` is still where it was.
 for (const type of ['pointermove', 'pointerdown', 'pointerup']) {
@@ -777,7 +358,7 @@ for (const type of ['pointermove', 'pointerdown', 'pointerup']) {
 }
 document.addEventListener('click', (event) => {
   const button = event.target.closest?.('button');
-  if (button && !button.disabled && !button.matches(OWN_VOICE)) sound.play('uiClick');
+  if (button && !isOff(button) && !button.matches(OWN_VOICE)) sound.play('uiClick');
 });
 
 /* -------------------------------------------------------------------------- */
@@ -846,9 +427,70 @@ function buildTooltip({ name, cost, typeClass, typeLine, description, traits }) 
   return fragment;
 }
 
+function cardTooltip(card) {
+  return buildTooltip({
+    name: card.name,
+    cost: card.cost,
+    typeClass: `type-${card.type.toLowerCase()}`,
+    typeLine: `${card.type} · ${card.tagline}`,
+    description: card.description,
+    traits: card.traits,
+  });
+}
+
 /* -------------------------------------------------------------------------- */
-/* Loadout bar                                                                */
+/* Navigation: tabs and nickname                                              */
 /* -------------------------------------------------------------------------- */
+
+/**
+ * Opens one of the lobby's screens. The stage follows: the camera eases to the
+ * framing that screen asks for. With `focus` the keyboard goes to the screen's
+ * tab, for when what was pressed to get there is on the screen being left.
+ */
+function setTab(name, { focus = false } = {}) {
+  if (!TABS.includes(name) || state.phase !== 'lobby') return;
+  if (name !== state.tab) {
+    // A card picked up in the deck builder is put down when its screen is left.
+    clearPick();
+    hideTooltip();
+    state.tab = name;
+    document.body.dataset.tab = name;
+    for (const tab of dom.tabs) {
+      const selected = tab.dataset.tab === name;
+      tab.setAttribute('aria-selected', String(selected));
+      tab.tabIndex = selected ? 0 : -1;
+    }
+    for (const tab of TABS) dom.screens[tab].hidden = tab !== name;
+    // The Heroes tab always opens on the equipped champion: one only looked over steps down when the tab is left.
+    state.inspect = state.loadout.hero;
+    if (name === 'heroes') {
+      markRoster();
+      renderSheet({ replay: true });
+    }
+    stage.setView(name);
+    presentHero();
+  }
+  if (focus) dom.tabs[TABS.indexOf(name)].focus();
+}
+
+/** The tab list's arrow keys: the arrows open the next screen, wrapping at both ends, and Home and End the first and last. */
+function onTabKey(event) {
+  const index = TABS.indexOf(state.tab);
+  const to = { ArrowRight: index + 1, ArrowLeft: index - 1, Home: 0, End: TABS.length - 1 }[event.key];
+  if (to === undefined) return;
+  event.preventDefault();
+  sound.play('uiClick');
+  setTab(TABS[(to + TABS.length) % TABS.length], { focus: true });
+}
+
+function initTabs() {
+  for (const tab of dom.tabs) {
+    tab.addEventListener('click', () => setTab(tab.dataset.tab));
+    tab.addEventListener('keydown', onTabKey);
+  }
+  dom.changeHeroBtn.addEventListener('click', () => setTab('heroes', { focus: true }));
+  dom.editDeckBtn.addEventListener('click', () => setTab('deck', { focus: true }));
+}
 
 function cleanNickname(value) {
   const cleaned = value.replace(/[^\p{L}\p{N} _\-.']/gu, '').replace(/\s+/g, ' ');
@@ -878,15 +520,24 @@ function initNickname() {
   } catch {
     dom.nickname.value = '';
   }
+  // Kept as it is typed, so a name is not lost to a page closed with the field still open.
   dom.nickname.addEventListener('input', () => {
     const cleaned = cleanNickname(dom.nickname.value);
     if (cleaned !== dom.nickname.value) dom.nickname.value = cleaned;
+    storeNickname(cleaned.trim());
   });
-  dom.nickname.addEventListener('change', () => storeNickname(dom.nickname.value.trim()));
+  dom.nickname.addEventListener('change', () => {
+    dom.nickname.value = dom.nickname.value.trim();
+    storeNickname(dom.nickname.value);
+  });
   dom.nickname.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter') findMatch();
+    if (event.key === 'Enter' || event.key === 'Escape') dom.nickname.blur();
   });
 }
+
+/* -------------------------------------------------------------------------- */
+/* Loadout: the equipped champion and the Battle Deck                         */
+/* -------------------------------------------------------------------------- */
 
 /** A painted illustration as an <img>. */
 function painting(src) {
@@ -902,6 +553,10 @@ const CARDS_BY_ID = Object.fromEntries(CARDS.map((card) => [card.id, card]));
 /** Where a deck-builder card sits: the Battle Deck or the Reserve. */
 function zoneOf(cardId) {
   return state.loadout.deck.includes(cardId) ? 'deck' : 'reserve';
+}
+
+function averageCost(deck) {
+  return deck.reduce((sum, id) => sum + CARDS_BY_ID[id].cost, 0) / deck.length;
 }
 
 function storeLoadout() {
@@ -926,113 +581,266 @@ function initLoadout() {
     // Unreadable or missing: start from the defaults.
   }
   setLoadout(saved);
-  renderChampions();
-  renderAbilities();
+  state.inspect = state.loadout.hero;
+  renderRoster();
+  renderSheet();
+  renderChampion();
+  renderLoadoutDeck();
   setBuilderHint(BUILDER_HINT);
   renderBuilder({ intro: true });
+  presentHero();
 }
 
-/* Champion selector: a radio group, one button per champion. */
+function showRealm(node, realm) {
+  node.dataset.realm = realm;
+  setText(node, REALM_NAMES[realm]);
+}
 
-function renderChampions() {
-  dom.champions.replaceChildren(
-    ...CHAMPION_IDS.map((id) => {
-      const champion = CHAMPIONS[id];
-      const chip = el('button', 'hero-chip');
-      chip.type = 'button';
-      chip.dataset.champion = id;
-      chip.setAttribute('role', 'radio');
-      chip.setAttribute('aria-label', `${champion.name}, ${champion.role}. ${champion.description}`);
+/** The equipped champion, wherever the Play screen names it: on the nameplate beside the pedestal and in the Battle Loadout. */
+function renderChampion() {
+  const champion = CHAMPIONS[state.loadout.hero];
+  showRealm(dom.plateRealm, champion.faction);
+  setText(dom.plateName, champion.name);
+  setText(dom.plateTitle, champion.title);
+  dom.loadoutPortrait.replaceChildren(painting(portraitArt(champion.id)));
+  setText(dom.loadoutName, champion.name);
+  setText(dom.loadoutRole, champion.role);
+  showRealm(dom.loadoutRealm, champion.faction);
+}
 
-      const portrait = el('span', 'hero-portrait');
-      portrait.append(painting(portraitArt(id)));
-      const text = el('span', 'hero-text');
-      const meta = el('span', 'hero-meta');
-      meta.append(el('span', '', champion.role));
-      text.append(el('span', 'hero-name', champion.name), meta);
-      chip.append(portrait, text, el('i', 'hero-check'));
-
-      chip.addEventListener('click', () => selectChampion(id));
-      chip.addEventListener('keydown', onChampionKey);
-      bindTooltip(chip, () =>
-        buildTooltip({
-          name: champion.name,
-          typeClass: 'type-hero',
-          typeLine: `Hero · ${champion.role}`,
-          description: champion.description,
-          traits: ['Mouse Move & Attack', `Abilities ${champion.abilities.map((ability) => ability.key).join(' ')}`, `Relics ${HERO.items.map((item) => item.key).join(' ')}`],
-        }),
-      );
-      return chip;
+/** The Battle Deck in small, on the Play screen, with what it costs on average. */
+function renderLoadoutDeck() {
+  const { deck } = state.loadout;
+  dom.loadoutDeck.replaceChildren(
+    ...deck.map((id) => {
+      const card = CARDS_BY_ID[id];
+      const item = el('li', `mini-card type-${card.type.toLowerCase()}`);
+      item.setAttribute('aria-label', `${card.name}, ${card.cost} Elixir`);
+      const cost = el('span', 'card-cost');
+      cost.append(el('span', '', String(card.cost)));
+      const art = el('span', 'card-art');
+      art.append(painting(cardArt(card.id)));
+      item.append(cost, art);
+      bindTooltip(item, () => cardTooltip(card));
+      return item;
     }),
   );
-  markChampion();
+  dom.loadoutAvg.textContent = averageCost(deck).toFixed(1);
 }
 
-/** Radio-group arrow keys: the arrows move the choice, wrapping at both ends. */
-function onChampionKey(event) {
+/* -------------------------------------------------------------------------- */
+/* Heroes: the roster and the champion sheet                                  */
+/* -------------------------------------------------------------------------- */
+
+/** The roster: a radio group, one card per champion, and the champions still to come standing locked at its foot. */
+function renderRoster() {
+  const cards = CHAMPION_IDS.map((id) => {
+    const champion = CHAMPIONS[id];
+    const card = el('button', 'roster-card');
+    card.type = 'button';
+    card.dataset.champion = id;
+    card.dataset.realm = champion.faction;
+    card.setAttribute('role', 'radio');
+
+    const portrait = el('span', 'roster-portrait');
+    portrait.append(painting(portraitArt(id)));
+    const text = el('span', 'roster-text');
+    text.append(el('span', 'roster-name', champion.name), el('span', 'roster-role', champion.role));
+    card.append(portrait, text, el('span', 'roster-flag', 'Equipped'));
+
+    card.addEventListener('click', () => inspectChampion(id));
+    card.addEventListener('keydown', onRosterKey);
+    return card;
+  });
+
+  const locked = TEASERS.map((teaser) => {
+    const card = el('button', 'roster-card is-locked');
+    card.type = 'button';
+    card.style.setProperty('--card', teaser.tint);
+    card.setAttribute('role', 'radio');
+    card.setAttribute('aria-checked', 'false');
+    card.setAttribute('aria-disabled', 'true');
+    card.tabIndex = -1;
+
+    const portrait = el('span', 'roster-portrait');
+    portrait.innerHTML = `<svg viewBox="0 0 64 64" aria-hidden="true"><path class="bust" d="${teaser.bust}"/><path class="mark" d="${teaser.mark}"/></svg>`;
+    portrait.append(glyph('lock', 'roster-lock'));
+    const text = el('span', 'roster-text');
+    text.append(el('span', 'roster-name', teaser.name), el('span', 'roster-role', teaser.role));
+    card.append(portrait, text, el('span', 'soon-tag', 'Coming Soon'));
+
+    // A locked champion cannot be chosen: it says so, and shakes its head.
+    card.addEventListener('click', () => {
+      sound.play('deny');
+      card.classList.remove('is-denied');
+      void card.offsetWidth;
+      card.classList.add('is-denied');
+    });
+    return card;
+  });
+
+  dom.roster.replaceChildren(
+    ...[...cards, ...locked].map((card) => {
+      const item = el('li');
+      item.setAttribute('role', 'none');
+      item.append(card);
+      return item;
+    }),
+  );
+  setText(dom.rosterCount, `${cards.length} / ${cards.length + locked.length}`);
+  markRoster();
+}
+
+/** Radio-group arrow keys: the arrows move the choice among the champions that can be chosen, wrapping at both ends. */
+function onRosterKey(event) {
   const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
   if (!step) return;
   event.preventDefault();
-  const index = CHAMPION_IDS.indexOf(state.loadout.hero);
-  selectChampion(CHAMPION_IDS[(index + step + CHAMPION_IDS.length) % CHAMPION_IDS.length], true);
+  const index = CHAMPION_IDS.indexOf(state.inspect);
+  inspectChampion(CHAMPION_IDS[(index + step + CHAMPION_IDS.length) % CHAMPION_IDS.length], true);
 }
 
-function selectChampion(id, moveFocus = false) {
+/**
+ * Brings a champion onto the pedestal to be looked over. It answers with a
+ * flourish of its weapon and its own fanfare; it is not taken into battle until
+ * Equip Champion is pressed.
+ */
+function inspectChampion(id, moveFocus = false) {
   if (state.phase !== 'lobby') return;
-  if (id !== state.loadout.hero) {
+  if (id !== state.inspect) {
     // Each champion answers in its own voice, and before the page is redrawn: sound does not wait for pictures.
     sound.play('heroSelect', { hero: id });
-    state.loadout.hero = id;
-    storeLoadout();
-    markChampion();
-    renderAbilities();
+    state.inspect = id;
+    markRoster();
+    renderSheet();
   } else {
     sound.play('uiClick');
   }
-  if (moveFocus) dom.champions.querySelector(`[data-champion="${id}"]`).focus();
+  // Even the champion already standing there salutes when it is picked again.
+  presentHero({ flourish: true });
+  if (moveFocus) dom.roster.querySelector(`[data-champion="${id}"]`).focus();
 }
 
-/** Radio state: the chosen champion is checked and the only tab stop. */
-function markChampion() {
-  for (const chip of dom.champions.children) {
-    const chosen = chip.dataset.champion === state.loadout.hero;
-    chip.setAttribute('aria-checked', String(chosen));
-    chip.tabIndex = chosen ? 0 : -1;
+/** Radio state: the champion on show is checked and the only tab stop; the equipped one wears its flag. */
+function markRoster() {
+  for (const card of dom.roster.querySelectorAll('[data-champion]')) {
+    const id = card.dataset.champion;
+    const chosen = id === state.inspect;
+    card.setAttribute('aria-checked', String(chosen));
+    card.tabIndex = chosen ? 0 : -1;
+    card.querySelector('.roster-flag').hidden = id !== state.loadout.hero;
   }
 }
 
-/** The four abilities of the chosen champion: key, icon and name, with the description in the tooltip. */
-function renderAbilities() {
-  const champion = CHAMPIONS[state.loadout.hero];
-  dom.abilities.setAttribute('aria-label', `${champion.name} abilities`);
-  dom.abilities.replaceChildren(
+const counting = new WeakMap();
+
+/** Counts a figure on screen from `from` up or down to `to`. */
+function countTo(node, to, from) {
+  cancelAnimationFrame(counting.get(node));
+  if (reducedMotion.matches || from === to) {
+    node.textContent = String(to);
+    return;
+  }
+  const startedAt = performance.now();
+  const step = (now) => {
+    const t = clamp((now - startedAt) / 800, 0, 1);
+    node.textContent = String(Math.round(from + (to - from) * (1 - (1 - t) ** 3)));
+    if (t < 1) counting.set(node, requestAnimationFrame(step));
+  };
+  step(startedAt);
+}
+
+/**
+ * The sheet of the champion on show: its realm and role, the four stat bars,
+ * its abilities and the button that equips it. With `replay` the bars fill from
+ * empty, as they do when the sheet comes into view; otherwise they slide from
+ * the last champion's figures to this one's.
+ */
+function renderSheet({ replay = false } = {}) {
+  const champion = CHAMPIONS[state.inspect];
+  dom.sheet.dataset.realm = champion.faction;
+  showRealm(dom.sheetRealm, champion.faction);
+  setText(dom.sheetRole, champion.role);
+  setText(dom.sheetName, champion.name);
+  setText(dom.sheetLore, champion.description);
+
+  for (const meter of dom.meters) {
+    const rating = champion.ratings[meter.dataset.stat] ?? 0;
+    const readout = meter.querySelector('.meter-value');
+    if (replay) {
+      // Emptied without the slide, so that the fill which follows is seen from nothing.
+      meter.classList.add('is-reset');
+      meter.style.setProperty('--value', '0');
+      void meter.offsetWidth;
+      meter.classList.remove('is-reset');
+    }
+    meter.style.setProperty('--value', String(rating / 100));
+    countTo(readout, rating, replay ? 0 : Number(readout.textContent) || 0);
+  }
+
+  hideTooltip();
+  dom.sheetKit.setAttribute('aria-label', `${champion.name} abilities`);
+  dom.sheetKit.replaceChildren(
     ...champion.abilities.map((ability, index) => {
-      const item = el('li', 'ability');
+      const seconds = ability.cooldownMs / 1000;
+      const item = el('li', ability.ultimate ? 'kit-card is-ultimate' : 'kit-card');
       item.tabIndex = 0;
       item.style.setProperty('--i', index);
-      item.setAttribute(
-        'aria-label',
-        `${ability.key}: ${ability.name}. ${ability.manaCost} mana, ${ability.cooldownMs / 1000} second cooldown. ${ability.description}`,
-      );
-      const icon = el('span', 'ability-icon');
+      item.setAttribute('aria-label', `${ability.key}: ${ability.name}. ${ability.manaCost} mana, ${seconds} second cooldown. ${ability.description}`);
+
+      const icon = el('span', 'kit-icon');
       icon.append(painting(iconArt(ability.id)), el('kbd', '', ability.key));
-      item.append(icon, el('span', 'ability-name', ability.name));
+      const mana = el('span', 'kit-stat kit-mana', String(ability.manaCost));
+      mana.prepend(glyph('mana'));
+      mana.title = 'Mana cost';
+      const cooldown = el('span', 'kit-stat kit-cooldown', `${seconds}s`);
+      cooldown.prepend(glyph('clock'));
+      cooldown.title = 'Cooldown';
+      const head = el('div', 'kit-head');
+      head.append(el('strong', 'kit-name', ability.name), mana, cooldown);
+      const body = el('div', 'kit-body');
+      body.append(head, el('p', 'kit-brief', ability.brief));
+      item.append(icon, body);
+
       bindTooltip(item, () =>
         buildTooltip({
           name: ability.name,
           typeClass: 'type-hero',
-          typeLine: `Ability ${ability.key} · ${champion.name}`,
+          typeLine: `${ability.ultimate ? 'Ultimate' : 'Ability'} ${ability.key} · ${champion.name}`,
           description: ability.description,
-          traits: [`${ability.manaCost} Mana`, `${ability.cooldownMs / 1000}s Cooldown`],
+          traits: [`${ability.manaCost} Mana`, `${seconds}s Cooldown`],
         }),
       );
       return item;
     }),
   );
+  markEquip();
 }
 
-/* Deck builder: pick a card, then the card in the other zone it swaps places with. */
+/** The button under the sheet: an invitation to equip the champion on show, or the word that it is the one equipped. */
+function markEquip() {
+  const equipped = state.inspect === state.loadout.hero;
+  dom.equipBtn.classList.toggle('is-equipped', equipped);
+  // Marked rather than disabled, so that the keyboard stays on the button it has just pressed.
+  dom.equipBtn.setAttribute('aria-disabled', String(equipped));
+  setText(dom.equipLabel, equipped ? 'Equipped' : 'Equip Champion');
+}
+
+/** Takes the champion on show into battle: it becomes the equipped one, here and on the Play screen, and is remembered. */
+function equipChampion() {
+  if (state.phase !== 'lobby' || state.inspect === state.loadout.hero) return;
+  state.loadout.hero = state.inspect;
+  storeLoadout();
+  sound.play('cardEquip');
+  stage.flash();
+  markRoster();
+  markEquip();
+  renderChampion();
+}
+
+/* -------------------------------------------------------------------------- */
+/* Deck: pick a card, then the card in the other zone it swaps places with    */
+/* -------------------------------------------------------------------------- */
 
 const BUILDER_HINT = 'Pick a Reserve card, then the Battle Deck card it replaces.';
 
@@ -1049,9 +857,8 @@ function renderBuilder({ flash = [], intro = false, focusId = null } = {}) {
   }
   if (hadFocus && focusId) document.querySelector(`.builder [data-card="${focusId}"]`)?.focus();
   const { deck } = state.loadout;
-  const average = deck.reduce((sum, id) => sum + CARDS_BY_ID[id].cost, 0) / deck.length;
   dom.deckCount.textContent = `${deck.length} / ${MATCH.deckSize} Cards`;
-  dom.deckAvg.textContent = average.toFixed(1);
+  dom.deckAvg.textContent = averageCost(deck).toFixed(1);
 }
 
 function builderCard(card, zone, index, { swapped, intro }) {
@@ -1078,16 +885,7 @@ function builderCard(card, zone, index, { swapped, intro }) {
   button.append(cost, art, el('span', 'card-name', card.name));
 
   button.addEventListener('click', () => onBuilderCard(card.id));
-  bindTooltip(button, () =>
-    buildTooltip({
-      name: card.name,
-      cost: card.cost,
-      typeClass: `type-${card.type.toLowerCase()}`,
-      typeLine: `${card.type} · ${card.tagline}`,
-      description: card.description,
-      traits: card.traits,
-    }),
-  );
+  bindTooltip(button, () => cardTooltip(card));
   item.append(button);
   return item;
 }
@@ -1131,6 +929,7 @@ function swapCards(a, b) {
   storeLoadout();
   setBuilderHint(`${CARDS_BY_ID[inReserve].name} joins the Battle Deck in place of ${CARDS_BY_ID[inDeck].name}.`);
   renderBuilder({ flash: [inDeck, inReserve], focusId: b });
+  renderLoadoutDeck();
 }
 
 /** Puts down the card picked up in the deck builder. Returns whether there was one. */
@@ -1143,6 +942,18 @@ function clearPick() {
   return true;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Game data                                                                  */
+/* -------------------------------------------------------------------------- */
+
+/** Wherever the lobby says how long a search lasts, it says `QUEUE_TIMEOUT_MS`: 01:00. */
+function showQueueLimit() {
+  const limit = formatClock(QUEUE_TIMEOUT_MS);
+  setText(dom.modeLimit, limit);
+  setText(dom.queueLimit, `/ ${limit}`);
+  dom.queueHint.replaceChildren('If no challenger answers by ', el('strong', '', limit), ', an AI opponent takes the field.');
+}
+
 async function loadConfig(attempt = 0) {
   try {
     const response = await fetch('/api/config', { cache: 'no-store' });
@@ -1153,15 +964,6 @@ async function loadConfig(attempt = 0) {
     else toast('Could not load game data. Refresh the page to try again.', 'error', 12_000);
     return;
   }
-
-  const { queueTimeoutMs } = state.config;
-  state.queue.timeoutMs = queueTimeoutMs;
-
-  const limit = formatClock(queueTimeoutMs);
-  const seconds = Math.round(queueTimeoutMs / 1000);
-  dom.modeLine.textContent = `1v1 real-time PvP · An AI challenger takes the field if no rival appears within ${seconds} seconds`;
-  dom.queueLimit.textContent = `/ ${limit}`;
-  dom.queueHint.replaceChildren('If no challenger answers by ', el('strong', '', limit), ', an AI opponent takes the field.');
   refreshFindButton();
 }
 
@@ -1179,7 +981,7 @@ function findMatch() {
 
   setPhase('queue');
   refreshFindButton();
-  backdrop.setEnergy(1);
+  stage.setEnergy(1);
 
   state.queue.running = false;
   dom.queuePanel.classList.remove('resolved');
@@ -1203,10 +1005,9 @@ function findMatch() {
   loadGameView().catch(() => {});
 }
 
-function onQueueJoined({ nickname, timeoutMs, elapsedMs }) {
+function onQueueJoined({ nickname, elapsedMs }) {
   if (state.phase !== 'queue') return;
   dom.nickname.value = nickname;
-  state.queue.timeoutMs = timeoutMs;
   state.queue.startedAt = performance.now() - elapsedMs;
   if (!state.queue.running) {
     state.queue.running = true;
@@ -1216,16 +1017,15 @@ function onQueueJoined({ nickname, timeoutMs, elapsedMs }) {
 
 function tickQueue() {
   if (!state.queue.running) return;
-  const { startedAt, timeoutMs } = state.queue;
-  const elapsed = Math.min(performance.now() - startedAt, timeoutMs);
+  const elapsed = Math.min(performance.now() - state.queue.startedAt, QUEUE_TIMEOUT_MS);
 
   setText(dom.queueTimer, formatClock(elapsed));
-  dom.queueProgress.style.strokeDashoffset = String(RING_CIRCUMFERENCE * (1 - elapsed / timeoutMs));
-  dom.queueProgress.style.color = ringColor(elapsed / timeoutMs);
+  dom.queueProgress.style.strokeDashoffset = String(RING_CIRCUMFERENCE * (1 - elapsed / QUEUE_TIMEOUT_MS));
+  dom.queueProgress.style.color = ringColor(elapsed / QUEUE_TIMEOUT_MS);
 
   let status = QUEUE_MESSAGES[Math.floor(elapsed / 5000) % QUEUE_MESSAGES.length];
-  if (elapsed >= timeoutMs) status = 'No opponent found — summoning an AI challenger…';
-  else if (timeoutMs - elapsed <= 10_000) status = 'No rival yet — an AI challenger is arming up…';
+  if (elapsed >= QUEUE_TIMEOUT_MS) status = 'No opponent found — summoning an AI challenger…';
+  else if (QUEUE_TIMEOUT_MS - elapsed <= 10_000) status = 'No rival yet — an AI challenger is arming up…';
   setText(dom.queueStatus, status);
 
   requestAnimationFrame(tickQueue);
@@ -1254,7 +1054,7 @@ function onMatchFound(found) {
   announceReady(state.match);
 
   if (found.reason === 'timeout') {
-    dom.queueTimer.textContent = formatClock(state.queue.timeoutMs);
+    dom.queueTimer.textContent = formatClock(QUEUE_TIMEOUT_MS);
     dom.queueProgress.style.strokeDashoffset = '0';
   }
   dom.queueTitle.textContent = found.vsBot ? 'AI Challenger Summoned' : 'Opponent Found';
@@ -1299,8 +1099,8 @@ function showMatch(receivedAt) {
   dom.queueModal.hidden = true;
   dom.matchOverlay.hidden = false;
   setPhase('match');
-  backdrop.setEnergy(0.4);
-  backdrop.flash();
+  stage.setEnergy(0.4);
+  stage.flash();
   dom.leaveBtn.focus();
 
   const startsAt = receivedAt + match.countdownMs;
@@ -1393,7 +1193,10 @@ function showLoad() {
  * and rehearses a battle, so nothing is left to stall the match itself.
  */
 function loadGameView() {
-  gameViewLoading ??= import('./preload.js')
+  if (gameViewLoading) return gameViewLoading;
+  // The stage is still on screen behind the search: frames that run long while this goes on are no fault of its own.
+  stage.setBusy(true);
+  gameViewLoading = import('./preload.js')
     .then(({ preloadModules }) => preloadModules('./match.js', (k) => setLoad(k * DOWNLOAD_SHARE, 'Downloading the battlefield')))
     .then(() => import('./match.js'))
     .then(({ createMatchView }) =>
@@ -1411,6 +1214,7 @@ function loadGameView() {
       setLoad(1, '');
       // Console diagnostics: runedeck.stats() reports FPS, draw calls and triangles.
       window.runedeck = {
+        ...window.runedeck,
         stats: gameView.stats,
         project: gameView.project,
         lockQuality: gameView.lockQuality,
@@ -1429,7 +1233,8 @@ function loadGameView() {
       load.fraction = 0;
       load.label = '';
       throw error;
-    });
+    })
+    .finally(() => stage.setBusy(false));
   return gameViewLoading;
 }
 
@@ -1455,8 +1260,8 @@ async function onMatchStart(start) {
   clearInterval(state.countdownTimer);
   dom.queueModal.hidden = true;
   dom.matchOverlay.hidden = true;
+  // From here the battlefield is all there is on screen: `setPhase` stops the lobby's stage with it.
   setPhase('game');
-  backdrop.setPaused(true);
   view.start(start);
 }
 
@@ -1491,9 +1296,9 @@ function returnToLobby() {
   dom.matchOverlay.hidden = true;
   gameView?.stop();
   sound.setMusic('lobby');
-  backdrop.setPaused(false);
+  // Back in the lobby the stage picks up where it stopped.
   setPhase('lobby');
-  backdrop.setEnergy(0);
+  stage.setEnergy(0);
   refreshFindButton();
   if (!dom.findBtn.disabled) dom.findBtn.focus();
 }
@@ -1529,6 +1334,28 @@ function setConnection(status, text) {
   dom.connText.textContent = text;
 }
 
+/** The status bar's live figures: players online, players searching, matches being fought. */
+function showStats({ online, searching, matches }) {
+  const figures = [
+    [online, 'Online'],
+    [searching, 'Searching'],
+    [matches, matches === 1 ? 'Match Live' : 'Matches Live'],
+  ];
+  const text = figures.map(([count, label]) => `${count} ${label}`).join(' • ');
+  if (dom.lobbyStats.dataset.shown === text) return;
+  dom.lobbyStats.dataset.shown = text;
+  dom.lobbyStats.replaceChildren(
+    ...figures.flatMap(([count, label], i) => {
+      const figure = el('span', 'tally');
+      figure.append(el('b', '', String(count)), ` ${label}`);
+      if (i === 0) return [figure];
+      const dot = el('i', 'tally-dot', '•');
+      dot.setAttribute('aria-hidden', 'true');
+      return [dot, figure];
+    }),
+  );
+}
+
 function initSocket() {
   if (!socket) {
     setConnection('offline', 'Realtime client failed to load');
@@ -1545,6 +1372,7 @@ function initSocket() {
   socket.on('disconnect', () => {
     state.connected = false;
     setConnection('offline', 'Connection lost — reconnecting…');
+    delete dom.lobbyStats.dataset.shown;
     dom.lobbyStats.textContent = '';
     // The server drops queue and match state with the socket, so mirror that here.
     if (state.phase !== 'lobby') {
@@ -1555,9 +1383,7 @@ function initSocket() {
   });
 
   socket.on('server:hello', onServerHello);
-  socket.on('lobby:stats', ({ online, searching, matches }) => {
-    dom.lobbyStats.textContent = `${online} online · ${searching} searching · ${matches} ${matches === 1 ? 'match' : 'matches'} live`;
-  });
+  socket.on('lobby:stats', showStats);
   socket.on('lobby:error', ({ message }) => toast(message, 'error'));
   socket.on('queue:joined', onQueueJoined);
   socket.on('match:found', onMatchFound);
@@ -1571,6 +1397,7 @@ function initSocket() {
 /* -------------------------------------------------------------------------- */
 
 dom.findBtn.addEventListener('click', findMatch);
+dom.equipBtn.addEventListener('click', equipChampion);
 dom.cancelBtn.addEventListener('click', cancelQueue);
 dom.spawnBotBtn.addEventListener('click', () => {
   if (state.phase === 'queue' && !state.match) socket.emit('queue:spawnBot');
@@ -1587,7 +1414,11 @@ document.addEventListener('keydown', (event) => {
 window.addEventListener('resize', () => hideTooltip());
 window.addEventListener('scroll', () => hideTooltip(), { passive: true });
 
+initTabs();
 initNickname();
 initLoadout();
+showQueueLimit();
 initSocket();
 loadConfig();
+// Last, and not waited for: the lobby is in use while the stage is fetched and built.
+stage.open();
