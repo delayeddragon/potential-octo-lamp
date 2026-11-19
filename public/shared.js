@@ -258,7 +258,11 @@ export const CHAMPIONS = {
 /** Fixed order: the first is the default choice. */
 export const CHAMPION_IDS = Object.keys(CHAMPIONS);
 
-/** What every champion shares, whichever one a player picks: health, mana, growth and the relics. */
+/**
+ * What every champion shares, whichever one a player picks: health, mana, growth and the relics.
+ * A relic's `brief` is for the lobby's Codex alone: what it does in one line, without the price
+ * its `description` opens with.
+ */
 export const HERO = {
   maxHp: 1200,
   maxMana: 400,
@@ -291,6 +295,7 @@ export const HERO = {
       cost: 500,
       cooldownMs: 12_000,
       range: 7,
+      brief: 'Teleport instantly towards the cursor.',
       description: 'Costs 500 gold to unlock. Then: teleport instantly towards the cursor.',
     },
     {
@@ -300,6 +305,7 @@ export const HERO = {
       cost: 750,
       passive: true,
       lifesteal: 0.4,
+      brief: 'A crimson aura heals the hero for a share of the damage it deals.',
       description: 'Costs 750 gold to unlock. Then: a crimson aura heals the hero for 40% of the damage it deals.',
     },
     {
@@ -307,6 +313,7 @@ export const HERO = {
       id: 'rune_bottle',
       name: 'River Rune Bottle',
       holdsRune: true,
+      brief: 'Bottles the rune on the River pad, to be drunk when the fight calls for it.',
       description: 'Walk onto the River pad to bottle its rune, then press C to drink it: Double Damage, Haste or Arcane Regen.',
     },
   ],
